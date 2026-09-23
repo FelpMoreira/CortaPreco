@@ -1,0 +1,83 @@
+// Schema Prisma do pipeline de ofertas.
+// Multi-tenant já previsto via `tenantId` nullable em Product (fase SaaS).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id             String    @id @default(cuid())
+  store          String
+  storeProductId String
+  title          String
+  price          Decimal   @db.Decimal(10, 2)
+  oldPrice       Decimal?  @db.Decimal(10, 2)
+  discountPct    Int?
+  coupon         String?
+  imageUrl       String?
+  category       String?
+  rating         Decimal?  @db.Decimal(3, 2)
+  sales          Int?
+  url            String
+  status         String    @default("NEW")
+  tenantId       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  posts          Post[]
+
+  @@unique([tenantId, store, storeProductId])
+  @@index([status])
+  @@index([store])
+  @@index([createdAt])
+}
+
+model Post {
+  id                 String   @id @default(cuid())
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId          String
+  channelId          String?
+  platform           String   @default("TELEGRAM")
+  message            String
+  affiliateUrl       String
+  subId              String?
+  status             String   @default("SCHEDULED")
+  telegramMessageId  Int?
+  postedAt           DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  clicks             Click[]
+
+  @@index([status])
+  @@index([postedAt])
+  @@index([createdAt])
+}
+
+model Click {
+  id        String   @id @default(cuid())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  referrer  String?
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+  @@index([createdAt])
+}
+
+model Channel {
+  id        String   @id @default(cuid())
+  platform  String
+  telegramId String?
+  name      String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model AppConfig {
+  key   String @id
+  value String
+}

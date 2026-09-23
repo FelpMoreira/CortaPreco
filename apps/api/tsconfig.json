@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@cupons/shared": ["../../packages/shared/src/index.ts"],
+      "@cupons/affiliates": ["../../packages/affiliates/src/index.ts"],
+      "@cupons/db": ["../../packages/db/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

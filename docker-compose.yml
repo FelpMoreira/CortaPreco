@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cupons-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cupons
+      POSTGRES_PASSWORD: cupons
+      POSTGRES_DB: cupons
+    ports:
+      - "5434:5432"
+    volumes:
+      - cupons-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cupons"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: cupons-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - cupons-redisdata:/data
+
+volumes:
+  cupons-pgdata:
+  cupons-redisdata:
