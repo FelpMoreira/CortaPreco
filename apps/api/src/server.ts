@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import { prisma } from '@cupons/db';
-import { renderMessage } from '@cupons/shared';
+import { renderMessageHtml } from '@cupons/shared';
 import { config } from './config.js';
 import { createProductFromUrl, schedulePostForProduct } from './services/deals.js';
 
@@ -58,7 +58,7 @@ export function buildServer(): FastifyInstance {
       const product = await createProductFromUrl(url);
       const message =
         messageOverride ??
-        renderMessage({
+        renderMessageHtml({
           store: product.store as 'SHOPEE' | 'ALIEXPRESS' | 'AMAZON',
           title: product.title,
           price: Number(product.price),

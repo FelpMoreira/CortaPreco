@@ -1,4 +1,4 @@
-import { renderMessage } from '@cupons/shared';
+import { renderMessageHtml } from '@cupons/shared';
 import { ProviderRegistry } from '@cupons/affiliates';
 import { prisma, type Product as PrismaProduct } from '@cupons/db';
 
@@ -72,7 +72,7 @@ export async function schedulePostForProduct(
 
   const message =
     opts?.messageOverride ??
-    renderMessage({
+    renderMessageHtml({
       store: product.store as 'SHOPEE' | 'ALIEXPRESS' | 'AMAZON',
       title: product.title,
       price: Number(product.price),

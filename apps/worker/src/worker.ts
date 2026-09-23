@@ -1,14 +1,17 @@
 import { Worker } from 'bullmq';
 import { prisma } from '@cupons/db';
 import { config } from './config.js';
-import { sendTelegramMessage } from './sender.js';
+import { sendTelegramMessage, sendTelegramPhoto } from './sender.js';
 
 export function createPublishWorker(): Worker {
   const worker = new Worker(
     'publish',
     async (job) => {
       const { postId } = job.data as { postId: string };
-      const post = await prisma.post.findUnique({ where: { id: postId } });
+      const post = await prisma.post.findUnique({
+        where: { id: postId },
+        include: { product: true },
+      });
       if (!post) throw new Error(`Post ${postId} não encontrado`);
 
       if (!config.telegramChannel) throw new Error('TELEGRAM_CHANNEL não configurado');
@@ -16,7 +19,17 @@ export function createPublishWorker(): Worker {
       // pacing: evita rajada ao mesmo chat (~1 msg/s já é seguro p/ a Bot API)
       await new Promise((r) => setTimeout(r, 1200 + Math.floor(Math.random() * 800)));
 
-      const result = await sendTelegramMessage(config.telegramChannel, post.message);
+      let result;
+      if (post.product.imageUrl) {
+        try {
+          result = await sendTelegramPhoto(config.telegramChannel, post.product.imageUrl, post.message);
+        } catch {
+          // imagem inacessível p/ o Telegram → cai pra texto
+          result = await sendTelegramMessage(config.telegramChannel, post.message);
+        }
+      } else {
+        result = await sendTelegramMessage(config.telegramChannel, post.message);
+      }
 
       await prisma.post.update({
         where: { id: postId },

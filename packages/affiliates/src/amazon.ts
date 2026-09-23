@@ -135,6 +135,15 @@ export class AmazonProvider implements AffiliateProvider {
 
       // sem JSON-LD (página bloqueada por bot-check): tenta metadados/estado JS
       if (!jsonLd) title = extractProductTitle(html) ?? title;
+
+      if (!imageUrl) {
+        imageUrl =
+          html.match(/"hiRes":"(https:\/\/m\.media-amazon\.com\/images\/[^"]+)"/)?.[1] ??
+          html.match(/data-old-hires="(https:\/\/m\.media-amazon\.com\/images\/[^"]+)"/)?.[1] ??
+          html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] ??
+          html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)?.[1] ??
+          null;
+      }
     } catch {
       /* segue para os fallbacks abaixo */
     }
