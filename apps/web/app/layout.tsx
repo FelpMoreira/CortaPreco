@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Cupons & Ofertas',
-  description: 'As melhores ofertas com cupom e links com comissão.',
+  description: 'Promoções e cupons da Shopee, AliExpress e Amazon, atualizados todo dia.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

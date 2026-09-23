@@ -10,4 +10,6 @@ out/
 next-env.d.ts
 .DS_Store
 prisma/*.db
-cofre/
+# cofre: versionado, exceto credenciais e estado local do Obsidian
+cofre/03 - Credenciais.md
+cofre/.obsidian/workspace*.json

@@ -47,6 +47,7 @@ model Post {
   subId              String?
   status             String   @default("SCHEDULED")
   telegramMessageId  Int?
+  lastError          String?
   postedAt           DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

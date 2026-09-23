@@ -1,5 +1,4 @@
-import { config as loadEnv } from 'dotenv';
-loadEnv({ path: new URL('../../../.env', import.meta.url) });
+import './env.js';
 
 import { prisma } from '@cupons/db';
 import { publishQueue, tickScheduler } from './scheduler.js';

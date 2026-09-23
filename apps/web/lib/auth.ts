@@ -1,13 +1,15 @@
 // Auth do painel: token HMAC-SHA256 assinado (WebCrypto — roda em Node e Edge).
 
 const enc = new TextEncoder();
+const isProd = process.env.NODE_ENV === 'production';
 
 function getSecret(): string {
-  const s = process.env.JWT_SECRET || process.env.ADMIN_PASSWORD || 'dev-secret-troque';
-  if (s === 'troque-por-segredo-jwt-aleatorio' || s === 'troque-a-senha' || s === 'dev-secret-troque') {
-    console.warn('[auth] usando segredo padrão — troque JWT_SECRET/ADMIN_PASSWORD em produção');
-  }
-  return s;
+  const s = process.env.JWT_SECRET ?? '';
+  if (s.length >= 32 && !s.startsWith('troque')) return s;
+  // em produção, sem segredo forte o painel não abre (melhor que sessão forjável)
+  if (isProd) throw new Error('JWT_SECRET ausente ou fraco (use openssl rand -hex 32)');
+  console.warn('[auth] JWT_SECRET fraco — ok só em dev');
+  return s || 'dev-secret-somente-local';
 }
 
 async function hmacKey(): Promise<CryptoKey> {
@@ -20,11 +22,19 @@ async function hmacKey(): Promise<CryptoKey> {
 const toB64url = (s: string) => btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const fromB64url = (s: string) => atob(s.replace(/-/g, '+').replace(/_/g, '/'));
 
-export const SESSION_COOKIE = 'cupons_session';
-const TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const SESSION_COOKIE = isProd ? '__Host-cupons_session' : 'cupons_session';
+export const SESSION_TTL_S = 12 * 60 * 60;
+
+export const sessionCookieOptions = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: 'strict' as const,
+  path: '/',
+  maxAge: SESSION_TTL_S,
+};
 
 export async function signSession(): Promise<string> {
-  const payload = toB64url(JSON.stringify({ exp: Date.now() + TTL_MS }));
+  const payload = toB64url(JSON.stringify({ exp: Date.now() + SESSION_TTL_S * 1000 }));
   const sig = await crypto.subtle.sign('HMAC', await hmacKey(), enc.encode(payload));
   const sigB64 = toB64url(String.fromCharCode(...new Uint8Array(sig)));
   return `${payload}.${sigB64}`;

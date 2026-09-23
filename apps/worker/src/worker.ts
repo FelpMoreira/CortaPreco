@@ -13,6 +13,9 @@ export function createPublishWorker(): Worker {
         include: { product: true },
       });
       if (!post) throw new Error(`Post ${postId} não encontrado`);
+      // só processa quem o scheduler reivindicou; retry depois de um envio que deu certo
+      // (ex.: falha só no update abaixo) encontra POSTED e não duplica no canal
+      if (post.status !== 'POSTING') return;
 
       if (!config.telegramChannel) throw new Error('TELEGRAM_CHANNEL não configurado');
 
@@ -33,7 +36,7 @@ export function createPublishWorker(): Worker {
 
       await prisma.post.update({
         where: { id: postId },
-        data: { status: 'POSTED', postedAt: new Date(), telegramMessageId: result.messageId ?? null },
+        data: { status: 'POSTED', postedAt: new Date(), telegramMessageId: result.messageId ?? null, lastError: null },
       });
 
       // produto também vai pra POSTED-equivalente (expirações futuras tratam o resto)
@@ -47,12 +50,14 @@ export function createPublishWorker(): Worker {
 
   worker.on('failed', async (job, err) => {
     if (!job) return;
-    console.error(`[worker] post ${job?.data.postId} falhou:`);
-    console.error(err.message);
+    const final = job.attemptsMade >= (job.opts.attempts ?? 1);
+    console.error(`[worker] post ${job.data.postId} falhou (tentativa ${job.attemptsMade}${final ? ', desistindo' : ''}): ${err.message}`);
+    // o evento dispara a cada tentativa; só marca FAILED quando não há mais retry
+    if (!final) return;
     await prisma.post
       .update({
         where: { id: job.data.postId as string },
-        data: { status: 'FAILED' },
+        data: { status: 'FAILED', lastError: err.message.slice(0, 500) },
       })
       .catch(() => undefined);
   });

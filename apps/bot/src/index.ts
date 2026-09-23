@@ -1,5 +1,4 @@
-import { config as loadEnv } from 'dotenv';
-loadEnv({ path: new URL('../../../.env', import.meta.url) });
+import './env.js';
 
 import { Bot, Composer } from 'grammy';
 import { prisma } from '@cupons/db';
@@ -65,10 +64,6 @@ app.command('stats', async (ctx) => {
   );
 });
 
-app.command('whoami', (ctx) =>
-  ctx.reply(`Seu ID: ${ctx.from?.id}${adminIds.includes(ctx.from?.id ?? -1) ? ' ✅ admin' : ' ❌ sem acesso'}`),
-);
-
 app.command('channel', (ctx) => ctx.reply(`Canal configurado: ${channel || '(não configurado)'}`));
 
 // em grupos, qualquer mensagem faz o bot revelar o chat id (usado no TELEGRAM_CHANNEL)
@@ -82,9 +77,7 @@ app.on('message', (ctx) => {
 
 bot.use(app);
 
-console.log(`[bot] iniciando long polling (admins: ${adminIds.join(', ')})`);
-await bot.start();
-
+// registrar antes do start: bot.start() só resolve quando o bot para
 const shutdown = async () => {
   await bot.stop();
   await prisma.$disconnect();
@@ -92,3 +85,6 @@ const shutdown = async () => {
 };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+console.log(`[bot] iniciando long polling (admins: ${adminIds.join(', ')})`);
+await bot.start();

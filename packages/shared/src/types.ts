@@ -4,7 +4,7 @@ export type Store = (typeof STORES)[number];
 export const PRODUCT_STATUSES = ['NEW', 'READY', 'FILTERED', 'EXPIRED'] as const;
 export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
 
-export const POST_STATUSES = ['SCHEDULED', 'POSTING', 'POSTED', 'FAILED'] as const;
+export const POST_STATUSES = ['SCHEDULED', 'POSTING', 'POSTED', 'FAILED', 'CANCELED'] as const;
 export type PostStatus = (typeof POST_STATUSES)[number];
 
 export const CHANNEL_PLATFORMS = ['TELEGRAM', 'WHATSAPP'] as const;
@@ -40,6 +40,7 @@ export interface Post {
   subId: string | null;
   status: PostStatus;
   telegramMessageId: number | null;
+  lastError: string | null;
   postedAt: Date | null;
   updatedAt: Date;
 }

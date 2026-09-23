@@ -18,6 +18,16 @@ const storeEmoji: Record<Store, string> = {
 const er = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** Escapa texto para o parse_mode HTML do Telegram. */
+export const escapeHtml = er;
+
+/**
+ * Marcador do link na mensagem. O link final (redirector `/c/{postId}`) só existe
+ * depois que o post é criado, então preview e override usam o marcador e o
+ * agendamento substitui.
+ */
+export const LINK_PLACEHOLDER = '{link}';
+
 function buildLines(input: MessageInput): string[] {
   const lines: string[] = [];
 

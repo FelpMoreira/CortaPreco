@@ -1,10 +1,10 @@
-import { config as loadEnv } from 'dotenv';
-loadEnv({ path: new URL('../../../.env', import.meta.url) });
+import './env.js';
 
 import { prisma } from '@cupons/db';
-import { config } from './config.js';
+import { assertSafeConfig, config } from './config.js';
 import { buildServer } from './server.js';
 
+assertSafeConfig();
 const app = buildServer();
 
 const shutdown = async () => {
@@ -16,7 +16,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 try {
-  await app.listen({ port: config.port, host: '0.0.0.0' });
+  await app.listen({ port: config.port, host: config.host });
 } catch (err) {
   app.log.error(err);
   process.exit(1);

@@ -1,11 +1,10 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const TELEGRAM_URL = process.env.NEXT_PUBLIC_TELEGRAM_URL || '';
 
 interface CatalogPost {
   id: string;
-  message: string;
   postedAt: string | null;
   product: {
-    id: string;
     store: string;
     title: string;
     imageUrl: string | null;
@@ -13,119 +12,116 @@ interface CatalogPost {
     oldPrice: string | number | null;
     discountPct: number | null;
     coupon: string | null;
-    url: string;
   };
 }
 
+const STORE_NAME: Record<string, string> = { SHOPEE: 'Shopee', ALIEXPRESS: 'AliExpress', AMAZON: 'Amazon' };
+
 function brl(v: string | number | null | undefined): string | null {
   if (v == null) return null;
-  const n = typeof v === 'number' ? v : Number(v);
-  if (!Number.isFinite(n)) return null;
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : null;
 }
 
-export const dynamic = 'force-dynamic';
+function since(iso: string | null): string {
+  if (!iso) return '';
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 60) return `há ${Math.max(min, 1)} min`;
+  if (min < 24 * 60) return `há ${Math.round(min / 60)} h`;
+  return `há ${Math.round(min / 1440)} d`;
+}
+
+// catálogo muda pouco: recalcula no máximo a cada minuto
+export const revalidate = 60;
 
 export default async function Home() {
   let posts: CatalogPost[] = [];
   let base = '';
-  let error = '';
+  let failed = false;
   try {
-    const res = await fetch(`${API_URL}/api/public/catalog`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/public/catalog`, { next: { revalidate: 60 }, signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(String(res.status));
     const json = (await res.json()) as { base: string; posts: CatalogPost[] };
     base = json.base;
     posts = json.posts;
-  } catch (e) {
-    error = (e as Error).message;
+  } catch {
+    failed = true;
   }
 
   return (
-    <main style={{ maxWidth: 980, margin: '0 auto', padding: '32px 16px 80px' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+    <main className="container">
+      <section className="hero spread" style={{ alignItems: 'flex-end' }}>
         <div>
-          <h1 style={{ margin: 0 }}>🔥 Cupons &amp; Ofertas</h1>
-          <p className="muted" style={{ marginTop: 4 }}>
-            As melhores promoções do dia, direto do seu canal no Telegram.
+          <h1>🔥 Cupons &amp; Ofertas</h1>
+          <p className="muted" style={{ fontSize: 16, margin: 0, maxWidth: 520 }}>
+            Promoções garimpadas todo dia na Shopee, AliExpress e Amazon. Preços conferidos na hora da publicação.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <a className="btn" href="#catalogo">
-            Ver ofertas
+        {TELEGRAM_URL && (
+          <a className="btn" href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer">
+            ✈️ Entrar no canal do Telegram
           </a>
-        </div>
-      </header>
-
-      <section style={{ margin: '32px 0', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <div className="card" style={{ flex: 1, minWidth: 260 }}>
-          <h3>📱 Canal no Telegram</h3>
-          <p className="muted">Receba todas as ofertas em tempo real.</p>
-          <a className="btn" href="#entrar">
-            Entrar no grupo
-          </a>
-        </div>
-        <div className="card" style={{ flex: 1, minWidth: 260 }}>
-          <h3>🏷️ Cupons exclusivos</h3>
-          <p className="muted">Cupons e descontos validados diariamente.</p>
-          <a className="btn ghost" href="#entrar">
-            Quero participar
-          </a>
-        </div>
+        )}
       </section>
 
-      <h2 id="catalogo" style={{ marginTop: 8 }}>
+      <h2 id="ofertas" style={{ fontSize: 18 }}>
         Ofertas recentes
       </h2>
 
-      {error && <p className="err">Falha ao carregar catálogo: {error}</p>}
-
-      {!error && posts.length === 0 && (
-        <div className="card">
-          <p className="muted">Nenhuma oferta publicada ainda. Em breve!</p>
+      {failed ? (
+        <p className="card empty">Não foi possível carregar as ofertas agora. Tente de novo em instantes.</p>
+      ) : posts.length === 0 ? (
+        <p className="card empty">Nenhuma oferta publicada ainda. Em breve!</p>
+      ) : (
+        <div className="offers">
+          {posts.map((p) => {
+            const price = brl(p.product.price);
+            const old = Number(p.product.oldPrice) > Number(p.product.price) ? brl(p.product.oldPrice) : null;
+            return (
+              <a
+                key={p.id}
+                className="offer"
+                href={`${base}${p.id}`}
+                target="_blank"
+                rel="sponsored nofollow noopener noreferrer"
+              >
+                <div className="offer-img">
+                  {p.product.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.product.imageUrl} alt={p.product.title} loading="lazy" referrerPolicy="no-referrer" />
+                  ) : null}
+                  {p.product.discountPct ? <span className="offer-off">-{p.product.discountPct}%</span> : null}
+                </div>
+                <div className="offer-body">
+                  <span className="muted">
+                    {STORE_NAME[p.product.store] ?? p.product.store} · {since(p.postedAt)}
+                  </span>
+                  <span className="clamp" style={{ fontSize: 14 }}>
+                    {p.product.title}
+                  </span>
+                  <div style={{ marginTop: 'auto' }}>
+                    {old && <div className="offer-old">{old}</div>}
+                    {price && <div className="offer-price">{price}</div>}
+                  </div>
+                  {p.product.coupon && (
+                    <span>
+                      Cupom: <span className="coupon">{p.product.coupon}</span>
+                    </span>
+                  )}
+                </div>
+              </a>
+            );
+          })}
         </div>
       )}
 
-      <div className="grid cols-2" style={{ marginTop: 16 }}>
-        {posts.map((p) => (
-          <article className="card" key={p.id} style={{ display: 'flex', gap: 12 }}>
-            {p.product.imageUrl ? (
-              <img className="pthumb" src={p.product.imageUrl} alt="" style={{ width: 72, height: 72 }} />
-            ) : null}
-            <div style={{ minWidth: 0 }}>
-              <span className={`badge ${p.product.store}`}>{p.product.store}</span>
-              <h3 style={{ margin: '6px 0 4px', fontSize: 15 }}>{p.product.title}</h3>
-              <p style={{ margin: 0, fontWeight: 700 }}>
-                {brl(p.product.price)}
-                {p.product.oldPrice && Number(p.product.price) < Number(p.product.oldPrice) ? (
-                  <>
-                    {' '}
-                    <span className="muted" style={{ textDecoration: 'line-through' }}>
-                      {brl(p.product.oldPrice)}
-                    </span>{' '}
-                    <span className="ok">-{p.product.discountPct ?? Math.round((1 - Number(p.product.price) / Number(p.product.oldPrice)) * 100)}%</span>
-                  </>
-                ) : null}
-              </p>
-              {p.product.coupon ? (
-                <p className="muted" style={{ margin: '4px 0 0' }}>
-                  Cupom: <strong>{p.product.coupon}</strong>
-                </p>
-              ) : null}
-              <a className="btn" href={`${base}${p.id}`} target="_blank" rel="noreferrer" style={{ marginTop: 10 }}>
-                Ver oferta →
-              </a>
-            </div>
-          </article>
-        ))}
-      </div>
-
-      <section id="entrar" className="card" style={{ marginTop: 48, textAlign: 'center' }}>
-        <h2>Quer receber no seu WhatsApp e Telegram?</h2>
-        <p className="muted">Entra nos grupos, é grátis.</p>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <span className="btn ghost">Telegram (em breve)</span>
-          <span className="btn ghost">WhatsApp (em breve)</span>
-        </div>
-      </section>
+      <footer className="footer muted">
+        <p>
+          <strong>Publicidade:</strong> os links desta página são links de afiliado. Se você comprar por eles, podemos
+          receber uma comissão da loja, sem custo extra para você. Preços e disponibilidade podem mudar a qualquer
+          momento; confira na loja antes de finalizar.
+        </p>
+      </footer>
     </main>
   );
 }

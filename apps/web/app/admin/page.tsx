@@ -1,362 +1,76 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { Toast, type Notify, type ProductRow } from './_ui/common';
+import { OfferEditor } from './_ui/OfferEditor';
+import { MetricsTab, PostsTab, ProductsTab } from './_ui/Tabs';
 
-interface ApiResponse<T> {
-  ok: boolean;
-  error?: string;
-  data?: T;
-}
+type Tab = 'nova' | 'posts' | 'produtos' | 'metricas';
 
-interface ProductRow {
-  id: string;
-  store: string;
-  storeProductId: string;
-  title: string;
-  price: string;
-  oldPrice: string | null;
-  discountPct: number | null;
-  coupon: string | null;
-  imageUrl: string | null;
-  url: string;
-  status: string;
-  createdAt: string;
-}
-
-interface PostRow {
-  id: string;
-  status: string;
-  message: string;
-  affiliateUrl: string;
-  subId: string | null;
-  postedAt: string | null;
-  createdAt: string;
-  _count: { clicks: number };
-  product: { id: string; title: string; imageUrl: string | null };
-}
-
-interface Stats {
-  clicks: number;
-  scheduled: number;
-  posted: number;
-  postedWithClicks: number;
-}
-
-type Tab = 'nova' | 'produtos' | 'posts' | 'metricas';
-
-const brl = (v: string | number | null | undefined): string | null => {
-  if (v == null) return null;
-  const n = typeof v === 'number' ? v : Number(v);
-  return Number.isFinite(n) ? n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : null;
-};
+const TABS: [Tab, string][] = [
+  ['nova', 'Nova oferta'],
+  ['posts', 'Posts'],
+  ['produtos', 'Produtos'],
+  ['metricas', 'Métricas'],
+];
 
 export default function AdminDashboard() {
   const [tab, setTab] = useState<Tab>('nova');
-  const [error, setError] = useState('');
-  const [ok, setOk] = useState('');
+  const [draft, setDraft] = useState<ProductRow | null>(null);
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  const notify: Notify = useCallback((kind, text) => setToast({ kind, text }), []);
+  const closeToast = useCallback(() => setToast(null), []);
+
+  async function logout() {
+    await fetch('/api/logout', { method: 'POST' }).catch(() => undefined);
+    window.location.assign('/admin/login');
+  }
 
   return (
-    <main style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px 80px' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <h1 style={{ margin: 0 }}>Painel de ofertas</h1>
-        <button
-          className="btn ghost"
-          onClick={async () => {
-            await fetch('/api/logout', { method: 'POST' });
-            window.location.assign('/admin/login');
-          }}
-        >
-          Sair
-        </button>
+    <main className="container">
+      <header className="spread">
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22 }}>🏷️ Painel de ofertas</h1>
+          <p className="muted" style={{ margin: '4px 0 0' }}>
+            Cole o link, confira os dados e agende. O scheduler publica respeitando o limite por hora.
+          </p>
+        </div>
+        <div className="row">
+          <a className="btn ghost sm" href="/" target="_blank" rel="noopener">
+            Ver site ↗
+          </a>
+          <button className="btn ghost sm" onClick={() => void logout()}>
+            Sair
+          </button>
+        </div>
       </header>
 
-      <nav style={{ display: 'flex', gap: 8, margin: '20px 0', flexWrap: 'wrap' }}>
-        {(
-          [
-            ['nova', '➕ Nova oferta'],
-            ['produtos', 'Produtos'],
-            ['posts', 'Posts'],
-            ['metricas', 'Métricas'],
-          ] as [Tab, string][]
-        ).map(([id, label]) => (
-          <button key={id} className="btn ghost" onClick={() => setTab(id)} style={tab === id ? { background: 'var(--accent)', color: '#1a1400' } : {}}>
+      <nav className="tabs" role="tablist">
+        {TABS.map(([id, label]) => (
+          <button key={id} className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
             {label}
           </button>
         ))}
       </nav>
 
-      {error && <p className="err">{error}</p>}
-      {ok && <p className="ok">{ok}</p>}
+      {/* editor fica montado para não perder o rascunho ao trocar de aba */}
+      <div hidden={tab !== 'nova'}>
+        <OfferEditor initial={draft} notify={notify} onScheduled={() => setDraft(null)} />
+      </div>
+      {tab === 'posts' && <PostsTab notify={notify} />}
+      {tab === 'produtos' && (
+        <ProductsTab
+          notify={notify}
+          onPost={(p) => {
+            setDraft({ ...p });
+            setTab('nova');
+          }}
+        />
+      )}
+      {tab === 'metricas' && <MetricsTab notify={notify} />}
 
-      {tab === 'nova' && <NewOffer onError={setError} onOk={setOk} />}
-      {tab === 'produtos' && <Products />}
-      {tab === 'posts' && <Posts />}
-      {tab === 'metricas' && <Metrics />}
+      {toast && <Toast kind={toast.kind} text={toast.text} onClose={closeToast} />}
     </main>
-  );
-}
-
-// ---------------------------------------------------------------- nova oferta
-
-function NewOffer({ onError, onOk }: { onError: (s: string) => void; onOk: (s: string) => void }) {
-  const [url, setUrl] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [product, setProduct] = useState<ProductRow | null>(null);
-  const [message, setMessage] = useState('');
-  const [scheduling, setScheduling] = useState(false);
-
-  async function preview() {
-    if (!url) return;
-    setLoading(true);
-    onError('');
-    onOk('');
-    try {
-      const res = await fetch('/api/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-      const json = (await res.json()) as { ok: boolean; error?: string; product?: ProductRow; message?: string };
-      if (!res.ok || !json.ok) {
-        onError(json.error ?? `Falha no preview (HTTP ${res.status}${res.status === 502 ? ' — API offline? rode ' : ''})`);
-        return;
-      }
-      if (!json.product) {
-        onError('Resposta sem produto');
-        return;
-      }
-      setProduct(json.product);
-      setMessage(json.message ?? '');
-      onOk('Preview gerado. Confere os dados e agenda.');
-    } catch {
-      onError('Falha no preview — a API está no ar? (rode npm run dev:api)');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function schedule() {
-    if (!product) return;
-    setScheduling(true);
-    onError('');
-    onOk('');
-    try {
-      const res = await fetch('/api/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: product.id, messageOverride: message }),
-      });
-      const json = (await res.json()) as { ok: boolean; error?: string; post?: PostRow };
-      if (!res.ok || !json.ok || !json.post) {
-        onError(json.error ?? `Falha ao agendar (HTTP ${res.status})`);
-        return;
-      }
-      onOk(`Post agendado (${json.post.id}). O scheduler envia logo.`);
-      setProduct(null);
-      setMessage('');
-      setUrl('');
-    } catch {
-      onError('Falha ao agendar — a API está no ar? (rode npm run dev:api)');
-    } finally {
-      setScheduling(false);
-    }
-  }
-
-  return (
-    <div className="grid" style={{ gap: 16 }}>
-      <div className="card">
-        <label className="muted">Cole a URL do produto (Shopee, AliExpress ou Amazon)</label>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <input
-            className="input"
-            placeholder="https://shopee.com.br/product/..."
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && void preview()}
-          />
-          <button className="btn" onClick={() => void preview()} disabled={loading || !url}>
-            {loading ? 'Buscando…' : 'Preview'}
-          </button>
-        </div>
-      </div>
-
-      {product && (
-        <div className="card">
-          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-            {product.imageUrl ? <img className="pthumb" src={product.imageUrl} alt="" style={{ width: 72, height: 72 }} /> : null}
-            <div>
-              <span className={`badge ${product.store}`}>{product.store}</span>
-              <p style={{ margin: '6px 0' }}>
-                <strong>{product.title}</strong>
-              </p>
-              <p className="muted" style={{ margin: 0 }}>
-                {brl(product.price)}
-                {product.oldPrice && Number(product.oldPrice) > Number(product.price) ? (
-                  <>
-                    {' '}
-                    <s>{brl(product.oldPrice)}</s> (-{product.discountPct ?? Math.round((1 - Number(product.price) / Number(product.oldPrice)) * 100)}%)
-                  </>
-                ) : null}
-                {product.coupon ? ` · cupom ${product.coupon}` : ''}
-                {' '}· status <strong>{product.status}</strong>
-              </p>
-            </div>
-          </div>
-
-          <label className="muted" style={{ display: 'block', margin: '16px 0 6px' }}>
-            Mensagem do post (editável)
-          </label>
-          <textarea className="textarea" value={message} onChange={(e) => setMessage(e.target.value)} />
-          <button className="btn" style={{ marginTop: 12 }} onClick={() => void schedule()} disabled={scheduling}>
-            {scheduling ? 'Agendando…' : '📅 Agendar post'}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- produtos
-
-function Products() {
-  const [items, setItems] = useState<ProductRow[]>([]);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/products');
-      const json = (await res.json()) as { ok: boolean; products: ProductRow[]; error?: string };
-      if (!json.ok) setError(json.error ?? 'Erro');
-      else setItems(json.products ?? []);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, []);
-  useEffect(() => void load(), [load]);
-
-  return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0 }}>Produtos</h2>
-        <button className="btn ghost" onClick={() => void load()}>Atualizar</button>
-      </div>
-      {error && <p className="err">{error}</p>}
-      {items.length === 0 ? (
-        <p className="muted">Nada coletado ainda.</p>
-      ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12 }}>
-          <thead>
-            <tr className="muted" style={{ textAlign: 'left' }}>
-              <th style={{ padding: 8 }}>Loja</th>
-              <th style={{ padding: 8 }}>Título</th>
-              <th style={{ padding: 8 }}>Preço</th>
-              <th style={{ padding: 8 }}>Desconto</th>
-              <th style={{ padding: 8 }}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((p) => (
-              <tr key={p.id} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: 8 }} className="muted">{p.store}</td>
-                <td style={{ padding: 8 }}>{p.title.slice(0, 60)}…</td>
-                <td style={{ padding: 8 }}>{brl(p.price)}</td>
-                <td style={{ padding: 8 }}>{p.discountPct ? `-${p.discountPct}%` : '—'}</td>
-                <td style={{ padding: 8 }}>
-                  <span className={`badge ${p.status}`}>{p.status}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- posts
-
-function Posts() {
-  const [items, setItems] = useState<PostRow[]>([]);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/posts');
-      const json = (await res.json()) as { ok: boolean; posts: PostRow[]; error?: string };
-      if (!json.ok) setError(json.error ?? 'Erro');
-      else setItems(json.posts ?? []);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, []);
-  useEffect(() => void load(), [load]);
-
-  return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0 }}>Posts</h2>
-        <button className="btn ghost" onClick={() => void load()}>Atualizar</button>
-      </div>
-      {error && <p className="err">{error}</p>}
-      {items.length === 0 ? (
-        <p className="muted">Nenhum post.</p>
-      ) : (
-        <div className="grid" style={{ marginTop: 12 }}>
-          {items.map((p) => (
-            <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                <span className={`badge ${p.status}`}>{p.status}</span>
-                <span className="muted">cliques: {p._count.clicks}</span>
-              </div>
-              <p style={{ margin: '8px 0', fontSize: 14 }}>{p.product.title}</p>
-              <pre className="pre" style={{ maxHeight: 160, overflow: 'auto' }}>{p.message}</pre>
-              <a className="muted" href={p.affiliateUrl} target="_blank" rel="noreferrer" style={{ wordBreak: 'break-all' }}>
-                {p.affiliateUrl}
-              </a>
-              {p.subId ? <p className="muted" style={{ margin: '4px 0 0' }}>subID: {p.subId}</p> : null}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- métricas
-
-function Metrics() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/stats');
-      const json = (await res.json()) as { ok: boolean; error?: string } & Partial<Stats>;
-      if (!json.ok) setError(json.error ?? 'Erro');
-      else setStats({ clicks: json.clicks ?? 0, scheduled: json.scheduled ?? 0, posted: json.posted ?? 0, postedWithClicks: json.postedWithClicks ?? 0 });
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, []);
-  useEffect(() => void load(), [load]);
-
-  if (error) return <p className="err">{error}</p>;
-  if (!stats) return <p className="muted">Carregando…</p>;
-
-  return (
-    <div className="grid cols-3">
-      <div className="card">
-        <h2 style={{ margin: 0 }}>{stats.clicks}</h2>
-        <p className="muted" style={{ marginTop: 6 }}>Cliques rastreados</p>
-      </div>
-      <div className="card">
-        <h2 style={{ margin: 0 }}>{stats.posted}</h2>
-        <p className="muted" style={{ marginTop: 6 }}>Posts publicados ({stats.postedWithClicks} com clique)</p>
-      </div>
-      <div className="card">
-        <h2 style={{ margin: 0 }}>{stats.scheduled}</h2>
-        <p className="muted" style={{ marginTop: 6 }}>Na fila (SCHEDULED)</p>
-      </div>
-    </div>
   );
 }
