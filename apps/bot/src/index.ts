@@ -31,11 +31,17 @@ const adminOnly =
   };
 
 const app = new Composer();
-app.use(adminOnly());
 
+// públicos: funcionam para qualquer pessoa (precisamos do /whoami para descobrir admins)
 app.command('start', (ctx) =>
   ctx.reply('Bot do pipeline de ofertas. Comandos: /stats', { parse_mode: 'HTML' }),
 );
+
+app.command('whoami', (ctx) =>
+  ctx.reply(`Seu ID: ${ctx.from?.id}${adminIds.includes(ctx.from?.id ?? -1) ? ' ✅ admin' : ' ❌ sem acesso'}`),
+);
+
+app.use(adminOnly());
 
 app.command('stats', async (ctx) => {
   const [products, posted, scheduled, clicks, dayPosts] = await Promise.all([
