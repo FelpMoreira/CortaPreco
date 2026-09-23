@@ -18,6 +18,7 @@
 | D12 | Fronteira da API | Só o servidor do Next chama a API admin; navegador nunca vê a `ADMIN_API_KEY` | Uma chave vazada não pode vir do front |
 | D13 | Cofre | Versionado no git, **exceto** a nota 03 | Contexto do projeto precisa viajar com o código |
 | D14 | Identidade visual | **Verdes da logo** (`#0b2219` + `#22a06e`), tema escuro e claro com botão em todas as páginas; logo oficial em `assets/brand/`; ícones Lucide (`react-icons/lu`), sem emoji na interface | Marca CortaPreço; emoji só dentro da mensagem do Telegram |
+| D15 | Subida local | **`docker compose up -d` sobe o stack inteiro em modo dev**; `db-init` roda `db:push` automaticamente; bot desativado sem `TELEGRAM_BOT_TOKEN`; override monta `apps/` + `packages/` p/ hot reload | Réplica do README num comando só, com rebuild necessário apenas quando `package.json`/schema mudarem |
 
 ## Log
 
@@ -37,6 +38,8 @@
   Preço antigo ("De:") segue sem extração. Após ~45 consultas seguidas a Amazon passou a devolver tela anti-robô:
   scrape não escala para automação — caminho é a Creators API (10 vendas/30d). 10 mais vendidos agendados como
   "MAIS VENDIDO NA AMAZON" (sem desconto, não chamados de oferta). Objetivo futuro: IA responsável pelos posts (fase 3).
+- **2026-09-23** — subida local automatizada (D15): `docker compose up -d` sobe Postgres, Redis, API, Web, Worker e Bot.
+  `db-init` executa `db:push`, e um override de dev monta `apps/`/`packages/` para hot reload com tsx watch e next dev.
 
 ## Regras de ouro
 

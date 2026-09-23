@@ -1,0 +1,21 @@
+# Override automático do `docker compose up -d` em desenvolvimento:
+# monta o código-fonte do host nos containers, então tsx watch / next dev
+# recarregam quando qualquer integrante edita um arquivo.
+# node_modules NÃO é montado: continua vindo da imagem (evita divergência).
+services:
+  api:
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+  web:
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages:/app/packages
+  worker:
+    volumes:
+      - ./apps/worker:/app/apps/worker
+      - ./packages:/app/packages
+  bot:
+    volumes:
+      - ./apps/bot:/app/apps/bot
+      - ./packages:/app/packages

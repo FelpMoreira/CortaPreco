@@ -23,12 +23,27 @@ packages/
 cofre/      Vault Obsidian com todo o contexto do projeto
 ```
 
-## Quickstart
+## Quickstart — tudo com um comando
 
 ```bash
-cp .env.example .env          # preencher credenciais
-docker compose up -d          # Postgres + Redis
-npm install
+cp .env.example .env          # preencher credenciais (segredos ficam fora do Git)
+docker compose up -d          # build + sobe Postgres, Redis, API, Web, Worker e Bot
+docker compose ps             # confira se todos estão Up
+```
+
+- Painel/site: <http://localhost:3000> (`/admin`)
+- API: <http://localhost:3001> (`/api/health`)
+- O job `db-init` roda `npm run db:push` automaticamente na primeira subida.
+- Sem `TELEGRAM_BOT_TOKEN`, o bot encerra desativado (sem loop de restart).
+- O override de dev monta `apps/` e `packages/`: tsx watch / next dev recarregam
+  sozinhos quando o código muda. Após mudanças em `package.json` ou no schema
+  Prisma, rode `docker compose up -d --build`.
+
+### Alternativa: infra no Docker + apps rodando locais
+
+```bash
+docker compose up -d postgres redis   # só Postgres + Redis (portas 5434/6379)
+npm ci
 npm run db:generate           # gera client Prisma
 npm run db:push               # cria as tabelas
 npm run dev:api               # API na porta 3001

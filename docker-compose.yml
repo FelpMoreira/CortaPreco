@@ -1,4 +1,5 @@
 services:
+  # ------------------------------------------------------------------ infra
   postgres:
     image: postgres:16-alpine
     container_name: cupons-postgres
@@ -25,6 +26,124 @@ services:
       - "6379:6379"
     volumes:
       - cupons-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ------------------------------------------------------- app (monorepo)
+  # Uma imagem base com todas as workspaces; cada serviço roda seu processo.
+  # DATABASE_URL/REDIS_URL usam o nome do serviço (rede interna do Compose).
+  db-init:
+    image: cupons-app:dev
+    build: .
+    container_name: cupons-db-init
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://cupons:cupons@postgres:5432/cupons?schema=public
+    command: ["npm", "run", "db:push"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: cupons-app:dev
+    build: .
+    container_name: cupons-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://cupons:cupons@postgres:5432/cupons?schema=public
+      REDIS_URL: redis://redis:6379
+      API_PORT: 3001
+      API_HOST: 0.0.0.0
+      TRUST_PROXY: "false"
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      SHOPEE_APP_ID: ${SHOPEE_APP_ID:-}
+      SHOPEE_APP_SECRET: ${SHOPEE_APP_SECRET:-}
+      SHOPEE_SUB_ID: ${SHOPEE_SUB_ID:-cupons}
+      ALIEXPRESS_APP_KEY: ${ALIEXPRESS_APP_KEY:-}
+      ALIEXPRESS_APP_SECRET: ${ALIEXPRESS_APP_SECRET:-}
+      ALIEXPRESS_TRACKING_ID: ${ALIEXPRESS_TRACKING_ID:-}
+      AMAZON_PARTNER_TAG: ${AMAZON_PARTNER_TAG:-}
+      AMAZON_MARKETPLACE: ${AMAZON_MARKETPLACE:-www.amazon.com.br}
+      AMAZON_ACCESS_KEY: ${AMAZON_ACCESS_KEY:-}
+      AMAZON_SECRET_KEY: ${AMAZON_SECRET_KEY:-}
+      AMAZON_PARTNER_TYPE: ${AMAZON_PARTNER_TYPE:-Associates}
+      AMAZON_REGION: ${AMAZON_REGION:-us-east-1}
+      AMAZON_API_HOST: ${AMAZON_API_HOST:-}
+    ports:
+      - "3001:3001"
+    command: ["npm", "run", "dev:api"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+
+  web:
+    image: cupons-app:dev
+    build: .
+    container_name: cupons-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      # Dentro da rede do Compose o Next fala com a API pelo nome do serviço
+      NEXT_PUBLIC_API_URL: http://api:3001
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+      NEXT_PUBLIC_TELEGRAM_URL: ${NEXT_PUBLIC_TELEGRAM_URL:-}
+      POSTS_PER_DAY: ${POSTS_PER_DAY:-10}
+    ports:
+      - "3000:3000"
+    command: ["npm", "run", "dev:web"]
+    depends_on:
+      api:
+        condition: service_started
+
+  worker:
+    image: cupons-app:dev
+    build: .
+    container_name: cupons-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://cupons:cupons@postgres:5432/cupons?schema=public
+      REDIS_URL: redis://redis:6379
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHANNEL: ${TELEGRAM_CHANNEL:-}
+      POSTS_PER_DAY: ${POSTS_PER_DAY:-10}
+      POSTS_PER_HOUR: ${POSTS_PER_HOUR:-3}
+    command: ["npm", "run", "dev:worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+
+  bot:
+    image: cupons-app:dev
+    build: .
+    container_name: cupons-bot
+    # sem token o bot sai com código 0 (desativado), sem loop de restart
+    restart: "no"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://cupons:cupons@postgres:5432/cupons?schema=public
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHANNEL: ${TELEGRAM_CHANNEL:-}
+      TELEGRAM_ADMIN_IDS: ${TELEGRAM_ADMIN_IDS:-}
+    command: ["sh", "-c", "if [ -z \"$TELEGRAM_BOT_TOKEN\" ]; then echo '[bot] TELEGRAM_BOT_TOKEN ausente — bot desativado'; exit 0; fi; exec npm run dev:bot"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
 
 volumes:
   cupons-pgdata:
