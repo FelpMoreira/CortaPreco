@@ -71,6 +71,15 @@ app.command('whoami', (ctx) =>
 
 app.command('channel', (ctx) => ctx.reply(`Canal configurado: ${channel || '(não configurado)'}`));
 
+// em grupos, qualquer mensagem faz o bot revelar o chat id (usado no TELEGRAM_CHANNEL)
+app.on('message', (ctx) => {
+  const type = ctx.chat.type;
+  if (type === 'group' || type === 'supergroup') {
+    console.log(`[bot] ${type}: id=${ctx.chat.id}`);
+    void ctx.reply(`ID deste grupo: ${ctx.chat.id}`).catch(() => undefined);
+  }
+});
+
 bot.use(app);
 
 console.log(`[bot] iniciando long polling (admins: ${adminIds.join(', ')})`);

@@ -34,6 +34,8 @@ export function createPublishWorker(): Worker {
 
   worker.on('failed', async (job, err) => {
     if (!job) return;
+    console.error(`[worker] post ${job?.data.postId} falhou:`);
+    console.error(err.message);
     await prisma.post
       .update({
         where: { id: job.data.postId as string },
