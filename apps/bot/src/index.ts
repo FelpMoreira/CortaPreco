@@ -1,3 +1,6 @@
+import { config as loadEnv } from 'dotenv';
+loadEnv({ path: new URL('../../../.env', import.meta.url) });
+
 import { Bot, Composer } from 'grammy';
 import { prisma } from '@cupons/db';
 

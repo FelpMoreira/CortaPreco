@@ -1,3 +1,6 @@
+import { config as loadEnv } from 'dotenv';
+loadEnv({ path: new URL('../../../.env', import.meta.url) });
+
 import { prisma } from '@cupons/db';
 import { config } from './config.js';
 import { buildServer } from './server.js';
