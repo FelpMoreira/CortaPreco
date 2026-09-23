@@ -1,4 +1,27 @@
 import type { Metadata } from 'next';
+import {
+  LuArrowRight,
+  LuArrowUpRight,
+  LuBadgeCheck,
+  LuBellOff,
+  LuCheck,
+  LuClock,
+  LuFlame,
+  LuPackage,
+  LuPercent,
+  LuPlus,
+  LuSearch,
+  LuShieldCheck,
+  LuSmartphone,
+  LuStore,
+  LuTag,
+  LuTarget,
+  LuTicket,
+  LuTrendingDown,
+  LuWallet,
+} from 'react-icons/lu';
+import { SiTelegram } from 'react-icons/si';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import './landing.css';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -115,28 +138,32 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
   const ctaHref = TELEGRAM_URL || '#ofertas';
   const ctaExternal = TELEGRAM_URL ? { target: '_blank', rel: 'noopener noreferrer' } : {};
 
+  const cta = (label: string, cls = 'btn lg') => (
+    <a className={cls} href={ctaHref} {...ctaExternal}>
+      {TELEGRAM_URL ? <SiTelegram size={18} /> : <LuArrowRight size={18} />}
+      {TELEGRAM_URL ? label : 'Ver ofertas de hoje'}
+    </a>
+  );
+
   return (
     <div className="lp">
       {/* ---------------------------------------------------------- nav */}
       <header className="lp-nav">
         <div className="lp-wrap">
-          <a href="#" className="lp-logo" aria-label="CortaPreço, início">
-            <span className="lp-logo-mark" aria-hidden>
-              ✂
-            </span>
-            <span>
-              Corta<b>Preço</b>
-            </span>
-          </a>
+          <Logo href="#" />
           <nav className="lp-links" aria-label="Seções">
             <a href="#ofertas">Ofertas</a>
             <a href="#como-funciona">Como funciona</a>
             <a href="#por-que">Por que a gente</a>
             <a href="#faq">Dúvidas</a>
           </nav>
-          <a className="btn sm" href={ctaHref} {...ctaExternal}>
-            {TELEGRAM_URL ? 'Entrar no canal' : 'Ver ofertas'}
-          </a>
+          <div className="lp-nav-actions">
+            <ThemeToggle />
+            <a className="btn sm" href={ctaHref} {...ctaExternal}>
+              {TELEGRAM_URL ? <SiTelegram size={14} /> : null}
+              {TELEGRAM_URL ? 'Entrar no canal' : 'Ver ofertas'}
+            </a>
+          </div>
         </div>
       </header>
 
@@ -157,9 +184,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
                 seu Telegram. Com cupom quando tem.
               </p>
               <div className="lp-cta">
-                <a className="btn lg" href={ctaHref} {...ctaExternal}>
-                  {TELEGRAM_URL ? '✈️ Entrar no canal grátis' : 'Ver ofertas de hoje'}
-                </a>
+                {cta('Entrar no canal grátis')}
                 {TELEGRAM_URL && (
                   <a className="btn ghost lg" href="#ofertas">
                     Ver ofertas de hoje
@@ -167,9 +192,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
                 )}
               </div>
               <div className="lp-trust">
-                <span>100% gratuito</span>
-                <span>Máx. {POSTS_PER_DAY} ofertas/dia</span>
-                <span>Sai quando quiser</span>
+                <span>
+                  <LuCheck size={16} /> 100% gratuito
+                </span>
+                <span>
+                  <LuCheck size={16} /> Máx. {POSTS_PER_DAY} ofertas/dia
+                </span>
+                <span>
+                  <LuCheck size={16} /> Sai quando quiser
+                </span>
               </div>
             </div>
 
@@ -180,6 +211,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
         {/* ---------------------------------------------------------- lojas + números */}
         <div className="lp-wrap">
           <div className="lp-stores" aria-label="Lojas acompanhadas">
+            <p className="lp-stores-label">Ofertas das maiores lojas do Brasil</p>
             {STORES.map((s) => (
               <span key={s.key} className={`lp-store ${s.cls}`}>
                 {s.name}
@@ -188,43 +220,38 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
           </div>
           <div className="lp-stats">
             {stats?.bestDiscountWeek ? (
-              <div className="lp-stat">
-                <strong>-{stats.bestDiscountWeek}%</strong>
-                <span>maior desconto da semana</span>
-              </div>
+              <Stat icon={<LuPercent size={22} />} value={`-${stats.bestDiscountWeek}%`} label="maior desconto da semana" />
             ) : null}
             {stats && stats.postedThisWeek >= 10 ? (
-              <div className="lp-stat">
-                <strong>{stats.postedThisWeek}</strong>
-                <span>ofertas nos últimos 7 dias</span>
-              </div>
+              <Stat icon={<LuTag size={22} />} value={String(stats.postedThisWeek)} label="ofertas nos últimos 7 dias" />
             ) : null}
-            <div className="lp-stat">
-              <strong>3</strong>
-              <span>grandes lojas monitoradas</span>
-            </div>
-            <div className="lp-stat">
-              <strong>R$ 0</strong>
-              <span>para participar, sempre</span>
-            </div>
+            <Stat icon={<LuStore size={22} />} value="3" label="grandes lojas monitoradas" />
+            <Stat icon={<LuWallet size={22} />} value="R$ 0" label="para participar, sempre" />
           </div>
         </div>
 
         {/* ---------------------------------------------------------- ofertas */}
-        <section id="ofertas" className="lp-section" style={{ scrollMarginTop: 64 }}>
+        <section id="ofertas" className="lp-section" style={{ scrollMarginTop: 66 }}>
           <div className="lp-wrap">
             <div className="lp-head">
-              <p className="lp-eyebrow">Ofertas recentes</p>
+              <p className="lp-eyebrow">
+                <LuFlame size={16} /> Ofertas recentes
+              </p>
               <h2 className="lp-h2">O que saiu no canal</h2>
               <p className="lp-lead">Mesmas ofertas do Telegram. Clique para abrir direto na loja.</p>
             </div>
 
             <nav className="lp-filter" aria-label="Filtrar por loja">
-              <a className="chip" aria-current={!store ? "page" : undefined} href="/#ofertas">
+              <a className="chip" aria-current={!store ? 'page' : undefined} href="/#ofertas">
                 Todas
               </a>
               {STORES.map((s) => (
-                <a key={s.key} className="chip" aria-current={store?.key === s.key ? "page" : undefined} href={`/?loja=${s.slug}#ofertas`}>
+                <a
+                  key={s.key}
+                  className="chip"
+                  aria-current={store?.key === s.key ? 'page' : undefined}
+                  href={`/?loja=${s.slug}#ofertas`}
+                >
                   {s.name}
                 </a>
               ))}
@@ -247,34 +274,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
         </section>
 
         {/* ---------------------------------------------------------- como funciona */}
-        <section id="como-funciona" className="lp-section">
+        <section id="como-funciona" className="lp-section soft">
           <div className="lp-wrap">
             <div className="lp-head center">
               <p className="lp-eyebrow">Como funciona</p>
               <h2 className="lp-h2">Três passos entre a promoção e você</h2>
             </div>
             <div className="lp-steps">
-              <div className="lp-step">
-                <span className="lp-icon" aria-hidden>
-                  🔎
-                </span>
-                <h3>A gente garimpa</h3>
-                <p>Acompanhamos as três maiores lojas do Brasil atrás de desconto de verdade e cupom ativo.</p>
-              </div>
-              <div className="lp-step">
-                <span className="lp-icon" aria-hidden>
-                  ✅
-                </span>
-                <h3>Conferimos o preço</h3>
-                <p>Antes de publicar, o preço é checado na loja. Oferta sem preço confirmado não sai.</p>
-              </div>
-              <div className="lp-step">
-                <span className="lp-icon" aria-hidden>
-                  📲
-                </span>
-                <h3>Chega no seu Telegram</h3>
-                <p>Foto, preço, cupom e o link direto para a loja. Você decide em segundos se vale a pena.</p>
-              </div>
+              <Step icon={<LuSearch size={22} />} title="A gente garimpa">
+                Acompanhamos as três maiores lojas do Brasil atrás de desconto de verdade e cupom ativo.
+              </Step>
+              <Step icon={<LuBadgeCheck size={22} />} title="Conferimos o preço">
+                Antes de publicar, o preço é checado na loja. Oferta sem preço confirmado não sai.
+              </Step>
+              <Step icon={<LuSmartphone size={22} />} title="Chega no seu Telegram">
+                Foto, preço, cupom e o link direto para a loja. Você decide em segundos se vale a pena.
+              </Step>
             </div>
           </div>
         </section>
@@ -288,16 +303,16 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
               <p className="lp-lead">Canal de promoção costuma ser uma enxurrada. O nosso foi desenhado para o contrário.</p>
             </div>
             <div className="lp-features">
-              <Feature icon="🎯" title="Só o que vale a pena">
+              <Feature icon={<LuTarget size={22} />} title="Só o que vale a pena">
                 Curadoria antes de publicar. Nada de produto aleatório só para encher o feed.
               </Feature>
-              <Feature icon="🔕" title="Zero spam">
+              <Feature icon={<LuBellOff size={22} />} title="Zero spam">
                 No máximo {POSTS_PER_DAY} ofertas por dia, espaçadas. Seu celular não vira uma sirene.
               </Feature>
-              <Feature icon="🏷️" title="Cupom junto">
+              <Feature icon={<LuTicket size={22} />} title="Cupom junto">
                 Quando existe cupom, ele vem destacado na oferta. É só copiar e usar no carrinho.
               </Feature>
-              <Feature icon="🔒" title="Link direto e oficial">
+              <Feature icon={<LuShieldCheck size={22} />} title="Link direto e oficial">
                 O link abre a página do produto na própria loja. Compra, pagamento e garantia são com ela.
               </Feature>
             </div>
@@ -305,20 +320,18 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
         </section>
 
         {/* ---------------------------------------------------------- CTA */}
-        <section className="lp-section">
+        <section className="lp-section" style={{ paddingTop: 0 }}>
           <div className="lp-wrap">
             <div className="lp-band">
               <h2 className="lp-h2">Sua próxima compra pode sair mais barata</h2>
               <p className="lp-lead">Entre no canal, deixe no silencioso se quiser e dê uma olhada quando der. Grátis.</p>
-              <a className="btn lg" href={ctaHref} {...ctaExternal}>
-                {TELEGRAM_URL ? '✈️ Entrar no canal do Telegram' : 'Ver ofertas de hoje'}
-              </a>
+              {cta('Entrar no canal do Telegram', 'btn white lg')}
             </div>
           </div>
         </section>
 
         {/* ---------------------------------------------------------- FAQ */}
-        <section id="faq" className="lp-section">
+        <section id="faq" className="lp-section soft">
           <div className="lp-wrap">
             <div className="lp-head center">
               <p className="lp-eyebrow">Dúvidas</p>
@@ -327,7 +340,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
             <div className="lp-faq">
               {FAQ.map(([q, a]) => (
                 <details key={q}>
-                  <summary>{q}</summary>
+                  <summary>
+                    {q}
+                    <LuPlus size={20} aria-hidden />
+                  </summary>
                   <p>{a}</p>
                 </details>
               ))}
@@ -340,21 +356,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
       <footer className="lp-footer">
         <div className="lp-wrap">
           <div className="lp-footer-top">
-            <span className="lp-logo">
-              <span className="lp-logo-mark" aria-hidden>
-                ✂
-              </span>
-              <span>
-                Corta<b>Preço</b>
-              </span>
-            </span>
+            <Logo alwaysDark />
             <nav aria-label="Rodapé">
               <a href="#ofertas">Ofertas</a>
               <a href="#como-funciona">Como funciona</a>
               <a href="#faq">Dúvidas</a>
               {TELEGRAM_URL && (
                 <a href={TELEGRAM_URL} target="_blank" rel="noopener noreferrer">
-                  Telegram
+                  <SiTelegram size={14} /> Telegram
                 </a>
               )}
             </nav>
@@ -375,7 +384,54 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
   );
 }
 
-function Feature({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
+function Logo({ href, alwaysDark }: { href?: string; alwaysDark?: boolean }) {
+  // logo recortada e com fundo transparente (gerada por assets/brand/build.py)
+  /* eslint-disable @next/next/no-img-element */
+  const img = alwaysDark ? (
+    <img src="/brand/logo-on-dark.png" alt="CortaPreço" width={829} height={295} />
+  ) : (
+    <>
+      <img className="logo-dark" src="/brand/logo-on-dark.png" alt="CortaPreço" width={829} height={295} />
+      <img className="logo-light" src="/brand/logo-on-light.png" alt="CortaPreço" width={829} height={295} />
+    </>
+  );
+  /* eslint-enable @next/next/no-img-element */
+  return href ? (
+    <a href={href} className="lp-logo" aria-label="CortaPreço, início">
+      {img}
+    </a>
+  ) : (
+    <span className="lp-logo">{img}</span>
+  );
+}
+
+function Stat({ icon, value, label }: { icon: React.ReactNode; value: string; label: string }) {
+  return (
+    <div className="lp-stat">
+      <span className="lp-stat-icon" aria-hidden>
+        {icon}
+      </span>
+      <div>
+        <strong>{value}</strong>
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function Step({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="lp-step">
+      <span className="lp-icon-box" aria-hidden>
+        {icon}
+      </span>
+      <h3>{title}</h3>
+      <p>{children}</p>
+    </div>
+  );
+}
+
+function Feature({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
     <div className="lp-feature">
       <span className="lp-feature-icon" aria-hidden>
@@ -399,12 +455,17 @@ function OfferCard({ post: p, href }: { post: CatalogPost; href: string }) {
         {p.product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={p.product.imageUrl} alt={p.product.title} loading="lazy" referrerPolicy="no-referrer" />
-        ) : null}
+        ) : (
+          <span className="offer-noimg" aria-hidden>
+            <LuPackage size={40} strokeWidth={1.5} />
+          </span>
+        )}
         {off ? <span className="offer-off">-{off}%</span> : null}
       </div>
       <div className="offer-body">
-        <span className="muted">
-          <span className={`badge ${p.product.store}`}>{STORE_NAME[p.product.store] ?? p.product.store}</span>{' '}
+        <span className="offer-meta">
+          <span className={`badge ${p.product.store}`}>{STORE_NAME[p.product.store] ?? p.product.store}</span>
+          <LuClock size={12} aria-hidden />
           {since(p.postedAt)}
         </span>
         <span className="clamp" style={{ fontSize: 14 }}>
@@ -422,11 +483,14 @@ function OfferCard({ post: p, href }: { post: CatalogPost; href: string }) {
       </div>
       <div className="offer-foot">
         <span>Ver na {STORE_NAME[p.product.store] ?? 'loja'}</span>
-        <span aria-hidden>→</span>
+        <LuArrowUpRight size={16} aria-hidden />
       </div>
     </a>
   );
 }
+
+// emojis aqui imitam a mensagem real do canal (template em packages/shared)
+const STORE_EMOJI: Record<string, string> = { SHOPEE: '🛒', ALIEXPRESS: '📦', AMAZON: '🛍️' };
 
 function PhoneMockup({ post }: { post: CatalogPost | undefined }) {
   const p = post?.product;
@@ -438,7 +502,10 @@ function PhoneMockup({ post }: { post: CatalogPost | undefined }) {
       <div className="lp-phone">
         <div className="lp-screen">
           <div className="lp-screen-bar">
-            <span className="lp-avatar">✂</span>
+            <span className="lp-avatar">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/icon-on-dark.png" alt="" />
+            </span>
             <div>
               <strong>CortaPreço · Ofertas</strong>
               <small>canal</small>
@@ -452,7 +519,9 @@ function PhoneMockup({ post }: { post: CatalogPost | undefined }) {
                   <img src={p.imageUrl} alt="" referrerPolicy="no-referrer" />
                 ) : null}
                 <div className="lp-msg-body">
-                  <b>🔥 OFERTA {(STORE_NAME[p.store] ?? p.store).toUpperCase()}</b>
+                  <b>
+                    {STORE_EMOJI[p.store] ?? ''} OFERTA {(STORE_NAME[p.store] ?? p.store).toUpperCase()}
+                  </b>
                   <br />
                   <br />
                   <b className="clamp">{p.title}</b>
@@ -467,19 +536,19 @@ function PhoneMockup({ post }: { post: CatalogPost | undefined }) {
                   {p.coupon ? (
                     <>
                       <br />
-                      🎟️ Cupom: <b>{p.coupon}</b>
+                      Cupom: <b>{p.coupon}</b>
                     </>
                   ) : null}
                   <br />
                   <br />
-                  🛒 <span className="lp-msg-link">link da oferta</span>
+                  <span className="lp-msg-link">link da oferta</span>
                   <div className="lp-msg-meta">{since(post?.postedAt ?? null)}</div>
                 </div>
               </div>
             ) : (
               <div className="lp-msg">
                 <div className="lp-msg-body">
-                  <b>🔥 Em breve por aqui</b>
+                  <b>Em breve por aqui</b>
                   <br />
                   As melhores ofertas do dia, com preço conferido.
                 </div>
@@ -490,13 +559,23 @@ function PhoneMockup({ post }: { post: CatalogPost | undefined }) {
       </div>
       {off ? (
         <div className="lp-float a">
-          <span className="muted">Economia</span>
-          <strong className="ok">-{off}%</strong>
+          <span className="lp-float-icon">
+            <LuTrendingDown size={18} />
+          </span>
+          <div>
+            Economia
+            <strong>-{off}%</strong>
+          </div>
         </div>
       ) : null}
       <div className="lp-float b">
-        <span className="muted">Custo para entrar</span>
-        <strong>R$ 0</strong>
+        <span className="lp-float-icon">
+          <LuWallet size={18} />
+        </span>
+        <div>
+          Para entrar
+          <strong>R$ 0</strong>
+        </div>
       </div>
     </div>
   );

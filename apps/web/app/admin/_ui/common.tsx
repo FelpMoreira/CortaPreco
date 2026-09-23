@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { LuX } from 'react-icons/lu';
 
 export interface ProductRow {
   id: string;
@@ -103,7 +104,7 @@ export function Toast({ kind, text, onClose }: { kind: 'success' | 'error'; text
       <div className="spread" style={{ flexWrap: 'nowrap' }}>
         <span>{text}</span>
         <button className="btn ghost sm" onClick={onClose} aria-label="Fechar">
-          ✕
+          <LuX size={14} />
         </button>
       </div>
     </div>

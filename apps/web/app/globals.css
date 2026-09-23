@@ -3,20 +3,39 @@
 }
 
 :root {
-  --bg: #0f1115;
-  --bg-card: #171a21;
-  --bg-input: #0d0f13;
-  --bg-hover: #1e222b;
-  --border: #262c38;
-  --text: #e6e8ee;
-  --muted: #9aa3b2;
-  --accent: #f5a524;
-  --accent-ink: #1a1400;
-  --green: #22c55e;
+  /* paleta da logo: verde quase preto #0b2219 + esmeralda #22a06e */
+  --bg: #07120d;
+  --bg-card: #0d1c15;
+  --bg-input: #081510;
+  --bg-hover: #12261c;
+  --border: #1c3328;
+  --text: #e7f2ec;
+  --muted: #8ea79a;
+  --accent: #2bb47a;
+  --accent-ink: #04140c;
+  --amber: #f5a524;
+  --green: #2bb47a;
   --red: #ef4444;
   --tg-bubble: #182533;
   --radius: 12px;
   color-scheme: dark;
+}
+
+/* tema claro (botão de tema ou preferência do sistema) */
+:root[data-theme='light'] {
+  --bg: #f6faf7;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: #eef5f0;
+  --border: #dce7e0;
+  --text: #0b1f14;
+  --muted: #56695d;
+  --accent: #16a34a;
+  --accent-ink: #ffffff;
+  --amber: #b45309;
+  --green: #15803d;
+  --red: #dc2626;
+  color-scheme: light;
 }
 
 html,
@@ -137,6 +156,22 @@ h3 {
 .btn.sm {
   padding: 6px 10px;
   font-size: 13px;
+}
+.btn.icon {
+  padding: 0;
+  width: 34px;
+  height: 34px;
+}
+
+/* logo: uma versão por tema */
+.logo-light {
+  display: none !important;
+}
+:root[data-theme='light'] .logo-dark {
+  display: none !important;
+}
+:root[data-theme='light'] .logo-light {
+  display: block !important;
 }
 
 /* ---------- abas ---------- */
@@ -313,7 +348,7 @@ img.pthumb {
   color: var(--green);
 }
 .warn {
-  color: var(--accent);
+  color: var(--amber);
 }
 
 .stat {
@@ -366,6 +401,7 @@ img.pthumb {
 /* ---------- toast ---------- */
 
 .toast {
+  color: var(--text);
   position: fixed;
   right: 16px;
   bottom: 16px;
@@ -470,4 +506,17 @@ img.pthumb {
   * {
     transition: none !important;
   }
+}
+
+/* ---------- marca (painel) ---------- */
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+.brand-logo {
+  display: block;
+  height: 40px;
+  width: auto;
 }

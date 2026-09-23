@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { LuExternalLink, LuLogOut } from 'react-icons/lu';
 import { Toast, type Notify, type ProductRow } from './_ui/common';
 import { OfferEditor } from './_ui/OfferEditor';
 import { MetricsTab, PostsTab, ProductsTab } from './_ui/Tabs';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 type Tab = 'nova' | 'posts' | 'produtos' | 'metricas';
 
@@ -30,18 +32,25 @@ export default function AdminDashboard() {
   return (
     <main className="container">
       <header className="spread">
-        <div>
-          <h1 style={{ margin: 0, fontSize: 22 }}>🏷️ Painel de ofertas</h1>
-          <p className="muted" style={{ margin: '4px 0 0' }}>
-            Cole o link, confira os dados e agende. O scheduler publica respeitando o limite por hora.
-          </p>
+        <div className="brand">
+          {/* eslint-disable @next/next/no-img-element */}
+          <img className="brand-logo logo-dark" src="/brand/logo-on-dark.png" alt="CortaPreço" width={829} height={295} />
+          <img className="brand-logo logo-light" src="/brand/logo-on-light.png" alt="CortaPreço" width={829} height={295} />
+          {/* eslint-enable @next/next/no-img-element */}
+          <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 14 }}>
+            <h1 style={{ margin: 0, fontSize: 18 }}>Painel</h1>
+            <p className="muted" style={{ margin: '2px 0 0' }}>
+              Cole o link, confira os dados e agende. O scheduler publica respeitando o limite por hora.
+            </p>
+          </div>
         </div>
         <div className="row">
+          <ThemeToggle />
           <a className="btn ghost sm" href="/" target="_blank" rel="noopener">
-            Ver site ↗
+            <LuExternalLink size={14} /> Ver site
           </a>
           <button className="btn ghost sm" onClick={() => void logout()}>
-            Sair
+            <LuLogOut size={14} /> Sair
           </button>
         </div>
       </header>

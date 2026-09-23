@@ -17,6 +17,7 @@
 | D11 | Ritmo | Intervalo mínimo = 60 min ÷ `POSTS_PER_HOUR` | Espalha os posts em vez de rajada no início da hora |
 | D12 | Fronteira da API | Só o servidor do Next chama a API admin; navegador nunca vê a `ADMIN_API_KEY` | Uma chave vazada não pode vir do front |
 | D13 | Cofre | Versionado no git, **exceto** a nota 03 | Contexto do projeto precisa viajar com o código |
+| D14 | Identidade visual | **Verdes da logo** (`#0b2219` + `#22a06e`), tema escuro e claro com botão em todas as páginas; logo oficial em `assets/brand/`; ícones Lucide (`react-icons/lu`), sem emoji na interface | Marca CortaPreço; emoji só dentro da mensagem do Telegram |
 
 ## Log
 
@@ -29,6 +30,9 @@
   CSP/HSTS, validação de schema; editar dados antes de agendar, preview estilo Telegram, cancelar/reenviar.
   Bug achado: `.env` era carregado **depois** das configs (ordem dos imports ESM).
 - **2026-09-23** — cofre passa a ser versionado (D13). Commits sem coautoria do assistente.
+- **2026-09-23** — identidade visual (D14): logo oficial, tema escuro verde, ícones Lucide no lugar de emojis.
+  Variantes da logo geradas por `python3 assets/brand/build.py` (recorte, fundo transparente, versão para fundo escuro, favicon, imagem de compartilhamento).
+- **2026-09-23** — botão de tema claro/escuro em todas as páginas; escolha salva no navegador, padrão segue o sistema.
 
 ## Regras de ouro
 

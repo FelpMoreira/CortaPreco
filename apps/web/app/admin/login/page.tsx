@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function LoginPage() {
   const [password, setPassword] = useState('');
@@ -32,10 +33,25 @@ export default function LoginPage() {
 
   return (
     <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 16 }}>
+      <div style={{ position: 'fixed', top: 16, right: 16 }}>
+        <ThemeToggle />
+      </div>
       <form onSubmit={submit} className="card" style={{ width: '100%', maxWidth: 340, display: 'grid', gap: 12 }}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>🏷️ Painel de ofertas</h1>
-        <p className="muted" style={{ margin: 0 }}>
-          Acesso restrito.
+        {/* eslint-disable @next/next/no-img-element */}
+        {(['dark', 'light'] as const).map((t) => (
+          <img
+            key={t}
+            className={`logo-${t}`}
+            src={`/brand/logo-on-${t}.png`}
+            alt="CortaPreço"
+            width={829}
+            height={295}
+            style={{ height: 56, width: 'auto', justifySelf: 'center', margin: '4px 0 8px' }}
+          />
+        ))}
+        {/* eslint-enable @next/next/no-img-element */}
+        <p className="muted" style={{ margin: 0, textAlign: 'center' }}>
+          Painel · acesso restrito
         </p>
         <label className="field">
           <span>Senha</span>
