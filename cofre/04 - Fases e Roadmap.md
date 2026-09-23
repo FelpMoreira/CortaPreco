@@ -1,48 +1,53 @@
 # 04 — Fases e Roadmap
 
 ## Fase 0 — Credenciais e setup
-- [ ] `.env` preenchido (ver [[03 - Credenciais]])
-- [ ] `docker compose up -d` (Postgres + Redis)
-- [ ] `npm run db:generate && npm run db:push`
-- [ ] Canal do Telegram criado + bot admin
-- [ ] Validar providers Shopee/AliExpress/Amazon no painel
+- [x] `docker compose up -d` (Postgres + Redis)
+- [x] `npm run db:generate && npm run db:push`
+- [x] Canal do Telegram criado + bot admin
+- [x] Amazon validada (3 posts reais publicados)
+- [ ] Trocar segredos fracos (`ADMIN_API_KEY`, `ADMIN_PASSWORD`, `JWT_SECRET`) — ver [[03 - Credenciais]]
+- [ ] Credenciais Shopee e validar no painel
+- [ ] Credenciais AliExpress e validar no painel
 
-## Fase 1 — MVP (manual) ✅ escopo
+## Fase 1 — MVP manual
 - [x] Scaffold monorepo (api, worker, bot, web, packages)
-- [ ] Painel: colar URL → preview → agendar post
-- [ ] Scheduler + publish no Telegram
-- [ ] Redirector de cliques
-- [ ] Catálogo público no site
-- [ ] Validar com uma oferta real de cada loja
+- [x] Painel: colar URL → conferir/editar dados → preview estilo Telegram → agendar
+- [x] Scheduler (tetos + intervalo mínimo) + envio no Telegram (foto + legenda)
+- [x] Redirector de cliques `/c/{postId}` (ignora robôs de preview)
+- [x] Catálogo público no site
+- [x] Cancelar/reenviar posts, descartar produtos, motivo de falha visível
+- [x] Segurança: auth painel/API, CSRF, rate limit, CSP — ver [[08 - Segurança]]
+- [ ] Domínio + HTTPS + `PUBLIC_BASE_URL` (sem isso não há contagem de cliques) — ver [[07 - Operação#Deploy]]
+- [ ] 1 oferta real de cada loja com dados corretos
 
-### Débitos técnicos (revisão 2026-09-23)
-- [ ] Expor a API num domínio público (ou túnel `cloudflared`) e preencher `PUBLIC_BASE_URL` → cliques rastreados
-- [x] Editar preço/título/cupom no painel antes de agendar (enrich falha com frequência)
-- [x] Ações no painel: reagendar/cancelar post FAILED, marcar produto FILTERED
-- [ ] Testes (vitest): template, `parseBRL`, parse de URL/ID dos providers, assinaturas Shopee/AliExpress
-- [x] Rate limit no login do painel e no `/c/:id`
+## Débitos técnicos
+- [ ] Testes (vitest): template, `parseBRL`, parse de URL/ID dos providers, assinaturas Shopee/AliExpress, `telegramToSafeHtml`
+- [ ] `next build` de produção validado (não roda junto com o `next dev`)
+- [ ] Rate limit do login é em memória: se tiver mais de uma instância do web, mover para Redis
+- [ ] Logs estruturados do worker/bot (hoje `console`) + alerta quando post vira FAILED
+- [ ] Backup automático do Postgres
 - [x] Versionar o cofre (só a nota 03 fica fora do git)
 
 ## Fase 2 — Coleta automática
-- [ ] `packages/collectors` com `Collector.collect(): Promise<Product[]>` por loja
+- [ ] `packages/collectors`: `Collector.collect(): Promise<Product[]>` por loja
 - [ ] Cron + fila `collect` (5–15 min por loja)
-- [ ] **Filtro de regras** (sem IA): desconto > %, nota, vendas, categoria on/off,
-      preço mínimo, anti-desconto falso (histórico de preço), cooldown por produto
-- [ ] Importação de **conversões** por subID (Shopee `conversionReport`, AliExpress orders, Amazon report)
+- [ ] **Filtro de regras** (sem IA): desconto mínimo, nota, vendas, categorias on/off, preço mínimo,
+      anti-desconto falso (histórico de preço), cooldown por produto
+- [ ] Importar **conversões** por `subId` (Shopee `conversionReport`, AliExpress orders, relatório Amazon)
 - [ ] Métricas: CTR, comissão por loja/categoria/horário (alimenta "quando postar")
 
 ## Fase 3 — Automação completa
-- [ ] IA no copy (mesmo renderer de template, LLM só escreve texto; números vêm do banco)
+- [ ] IA no texto (mesmo template; LLM só escreve, números vêm do banco)
 - [ ] WhatsApp via **Evolution API** (chip separado, aquecimento, pacing, opt-out)
-- [ ] Assinatura por interesse (`/add palavra`) — DM do Telegram
-- [ ] Board de aprovação (fila de curadoria)
+- [ ] Alertas por interesse (`/add palavra`) em DM do Telegram
+- [ ] Fila de curadoria (aprovar em lote o que a coleta trouxe)
 
 ## Fase 4 — SaaS multi-tenant
 - [ ] Auth de clientes + credenciais por tenant
 - [ ] Mesmo pipeline, providers por tenant
 - [ ] Billing/webhooks
 
-## Métricas de validação (MVP)
-- Conseguiu postar 3 ofertas reais (1 por loja) com dados corretos?
-- Clico no redirector? Contagem de cliques incrementa?
-- Scheduler não trava com teto diário?
+## Métricas de validação do MVP
+- Postou ofertas reais das 3 lojas com preço e link corretos?
+- Clique no canal incrementa a contagem no painel?
+- Scheduler respeita o teto diário sem travar?

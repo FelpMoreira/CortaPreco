@@ -80,7 +80,21 @@ export function buildServer(): FastifyInstance {
         },
       },
     });
-    return { ok: true, base: `${config.publicBaseUrl || `http://localhost:${config.port}`}/c/`, posts };
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [totalPosted, best, week] = await Promise.all([
+      prisma.post.count({ where: { status: 'POSTED' } }),
+      prisma.product.aggregate({
+        where: { posts: { some: { status: 'POSTED', postedAt: { gte: weekAgo } } } },
+        _max: { discountPct: true },
+      }),
+      prisma.post.count({ where: { status: 'POSTED', postedAt: { gte: weekAgo } } }),
+    ]);
+    return {
+      ok: true,
+      base: `${config.publicBaseUrl || `http://localhost:${config.port}`}/c/`,
+      stats: { totalPosted, postedThisWeek: week, bestDiscountWeek: best._max.discountPct ?? null },
+      posts,
+    };
   });
 
   // ---------- preview (admin) ----------

@@ -1,0 +1,577 @@
+/* ============================================================
+   Landing page (/) — prefixo lp-
+   ============================================================ */
+
+.lp {
+  --lp-max: 1180px;
+  --lp-glow: color-mix(in srgb, var(--accent) 22%, transparent);
+  overflow-x: clip;
+}
+
+.lp-wrap {
+  max-width: var(--lp-max);
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.lp-section {
+  padding: 88px 0;
+}
+.lp-section + .lp-section {
+  border-top: 1px solid var(--border);
+}
+
+.lp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 12px;
+}
+
+.lp-h2 {
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin: 0 0 12px;
+}
+
+.lp-lead {
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.6;
+  max-width: 560px;
+  margin: 0;
+}
+
+.lp-head {
+  margin-bottom: 40px;
+}
+.lp-head.center {
+  text-align: center;
+}
+.lp-head.center .lp-lead {
+  margin: 0 auto;
+}
+
+.btn.lg {
+  padding: 14px 22px;
+  font-size: 16px;
+  border-radius: 10px;
+}
+
+/* ---------- nav ---------- */
+
+.lp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+.lp-nav .lp-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 64px;
+}
+.lp-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+.lp-logo-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 17px;
+}
+.lp-logo b {
+  color: var(--accent);
+}
+.lp-links {
+  display: none;
+  gap: 28px;
+  font-size: 14px;
+}
+.lp-links a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.lp-links a:hover {
+  color: var(--text);
+}
+@media (min-width: 860px) {
+  .lp-links {
+    display: flex;
+  }
+}
+
+/* ---------- hero ---------- */
+
+.lp-hero {
+  position: relative;
+  padding: 72px 0 88px;
+}
+.lp-hero::before {
+  content: '';
+  position: absolute;
+  inset: -200px -10% auto;
+  height: 620px;
+  background:
+    radial-gradient(ellipse 50% 60% at 70% 30%, var(--lp-glow), transparent 70%),
+    radial-gradient(ellipse 40% 50% at 15% 10%, color-mix(in srgb, #3b82f6 12%, transparent), transparent 70%);
+  pointer-events: none;
+}
+.lp-hero-grid {
+  position: relative;
+  display: grid;
+  gap: 56px;
+  align-items: center;
+}
+@media (min-width: 960px) {
+  .lp-hero-grid {
+    grid-template-columns: 1.15fr 0.85fr;
+  }
+}
+.lp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+.lp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 25%, transparent);
+  animation: lp-pulse 2s infinite;
+}
+@keyframes lp-pulse {
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--green) 0%, transparent);
+  }
+}
+.lp-hero h1 {
+  font-size: clamp(38px, 6.4vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+  margin: 0 0 20px;
+}
+.lp-hero h1 em {
+  font-style: normal;
+  background: linear-gradient(100deg, var(--accent) 10%, #ff6a3d 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.lp-hero .lp-lead {
+  font-size: 19px;
+}
+.lp-cta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 32px;
+}
+.lp-trust {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.lp-trust span::before {
+  content: '✓ ';
+  color: var(--green);
+  font-weight: 700;
+}
+
+/* ---------- mockup de celular ---------- */
+
+.lp-phone {
+  position: relative;
+  width: min(340px, 100%);
+  margin: 0 auto;
+  border-radius: 40px;
+  padding: 12px;
+  background: linear-gradient(160deg, #2a2f3a, #111318);
+  box-shadow:
+    0 40px 80px -20px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  transform: rotate(2deg);
+}
+.lp-screen {
+  border-radius: 30px;
+  overflow: hidden;
+  background: #0e1621;
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+}
+.lp-screen-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #17212b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.lp-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+.lp-screen-bar strong {
+  display: block;
+  font-size: 14px;
+  color: #fff;
+}
+.lp-screen-bar small {
+  color: #7f91a4;
+  font-size: 12px;
+}
+.lp-feed {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px;
+}
+.lp-msg {
+  background: #182533;
+  border-radius: 14px 14px 14px 4px;
+  overflow: hidden;
+  color: #f1f1f1;
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 92%;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+.lp-msg img {
+  display: block;
+  width: 100%;
+  height: 170px;
+  object-fit: contain;
+  background: #fff;
+}
+.lp-msg-body {
+  padding: 9px 11px 7px;
+}
+.lp-msg-body b {
+  color: #fff;
+}
+.lp-msg-link {
+  color: #6ab3f3;
+  word-break: break-all;
+}
+.lp-msg-meta {
+  text-align: right;
+  font-size: 11px;
+  color: #7f91a4;
+  margin-top: 4px;
+}
+.lp-float {
+  position: absolute;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 16px 32px -12px rgba(0, 0, 0, 0.5);
+  font-size: 13px;
+  transform: rotate(-2deg);
+}
+.lp-float strong {
+  display: block;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.lp-float.a {
+  left: -36px;
+  top: 90px;
+}
+.lp-float.b {
+  right: -28px;
+  bottom: 80px;
+}
+@media (max-width: 520px) {
+  .lp-float {
+    display: none;
+  }
+}
+
+/* ---------- faixa de lojas + números ---------- */
+
+.lp-stores {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(28px, 7vw, 72px);
+  flex-wrap: wrap;
+  padding: 28px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.lp-store {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  opacity: 0.85;
+}
+.lp-store.shopee {
+  color: #ee4d2d;
+}
+.lp-store.ali {
+  color: #ff4747;
+}
+.lp-store.amazon {
+  color: #ff9900;
+}
+
+.lp-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin-top: 48px;
+}
+.lp-stat {
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+.lp-stat strong {
+  display: block;
+  font-size: 40px;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.lp-stat span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ---------- ofertas ---------- */
+
+.lp-filter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.lp-filter a {
+  text-decoration: none;
+}
+.offer-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* ---------- como funciona ---------- */
+
+.lp-steps {
+  display: grid;
+  gap: 16px;
+  counter-reset: step;
+}
+@media (min-width: 860px) {
+  .lp-steps {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.lp-step {
+  position: relative;
+  padding: 28px;
+  border-radius: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+.lp-step::before {
+  counter-increment: step;
+  content: '0' counter(step);
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  margin-bottom: 20px;
+}
+.lp-step h3 {
+  margin: 0 0 8px;
+  font-size: 19px;
+}
+.lp-step p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.lp-icon {
+  position: absolute;
+  top: 22px;
+  right: 24px;
+  font-size: 26px;
+}
+
+/* ---------- diferenciais ---------- */
+
+.lp-features {
+  display: grid;
+  gap: 16px;
+}
+@media (min-width: 720px) {
+  .lp-features {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.lp-feature {
+  display: flex;
+  gap: 16px;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg-card), transparent);
+}
+.lp-feature-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-size: 22px;
+}
+.lp-feature h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+.lp-feature p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 15px;
+}
+
+/* ---------- CTA final ---------- */
+
+.lp-band {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  padding: clamp(36px, 6vw, 64px);
+  text-align: center;
+  background:
+    radial-gradient(ellipse 60% 80% at 50% 0%, var(--lp-glow), transparent 70%),
+    var(--bg-card);
+  border: 1px solid var(--border);
+}
+.lp-band .lp-lead {
+  margin: 0 auto 28px;
+}
+
+/* ---------- FAQ ---------- */
+
+.lp-faq {
+  max-width: 760px;
+  margin: 0 auto;
+  display: grid;
+  gap: 10px;
+}
+.lp-faq details {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  padding: 0 20px;
+}
+.lp-faq summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 18px 0;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.lp-faq summary::-webkit-details-marker {
+  display: none;
+}
+.lp-faq summary::after {
+  content: '+';
+  color: var(--accent);
+  font-size: 20px;
+  line-height: 1;
+  transition: transform 0.2s;
+}
+.lp-faq details[open] summary::after {
+  transform: rotate(45deg);
+}
+.lp-faq details p {
+  margin: 0 0 18px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* ---------- rodapé ---------- */
+
+.lp-footer {
+  border-top: 1px solid var(--border);
+  padding: 40px 0 56px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.lp-footer-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.lp-footer nav {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.lp-footer a {
+  text-decoration: none;
+}
+.lp-footer a:hover {
+  color: var(--text);
+}

@@ -1,4 +1,6 @@
-# 05 — Pesquisa de APIs (pesquisa: set/2026)
+# 05 — Pesquisa de APIs
+
+> Pesquisa feita em set/2026. Contratos de API mudam: revalide antes de depender de um detalhe.
 
 ## Amazon
 - **PA-API 5.0 deprecated** em 15/mai/2026 → migrar para **Creators API**.
@@ -33,8 +35,12 @@
 - Programa de afiliado incerto → **adiado**.
 
 ## Telegram
-- Bot API oficial (`sendMessage`, long polling). Limites: ~20 msg/min por chat, 1 msg/s por chat; 429 com `retry_after`.
+- Bot API oficial (`sendMessage`, `sendPhoto`, long polling). Limites: ~20 msg/min por chat, 1 msg/s por chat; 429 com `retry_after`.
 - Canal one-to-many é o formato ideal p/ ofertas (não sofre flood de grupo).
+- **Legenda de foto: máx. 1024 caracteres**; texto puro: 4096. Acima de 1024 o worker manda só texto.
+- `parse_mode: HTML` aceita só `b i u s code pre a` e poucas outras; HTML inválido → erro 400 e post FAILED.
+- O Telegram **abre o link para gerar a prévia** (user-agent `TelegramBot`) — o redirector ignora esse acesso ao contar cliques.
+- Em grupos com privacy mode (padrão), o bot só recebe comandos e menções.
 
 ## WhatsApp
 - API oficial (Cloud/Business) **não serve grupos comuns**; exige templates pagos p/ proativo.

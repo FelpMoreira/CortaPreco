@@ -2,40 +2,47 @@
 
 ## O que é
 
-Grupo/canal de **ofertas e cupons** (Telegram como canal inicial, WhatsApp depois) que:
-1. Coleta produtos com desconto (Shopee, AliExpress, Amazon e outras no futuro).
-2. Enriquece dados (título, preço, desconto, imagem, cupom).
-3. Converte URLs em **links de afiliado** (comissão por venda).
-4. Gera a mensagem do post e publica nos canais.
-5. Rastreia **cliques** e (fase 2) **conversões/comissões**.
+Canal de **ofertas e cupons** (Telegram agora, WhatsApp depois) que:
+
+1. Coleta produtos com desconto (Shopee, AliExpress, Amazon; outras lojas no futuro).
+2. Enriquece os dados (título, preço, preço antigo, imagem, cupom) — e o admin corrige o que vier errado.
+3. Converte a URL em **link de afiliado** (comissão por venda), com **subID único por post**.
+4. Gera a mensagem e publica no canal, respeitando teto por hora/dia.
+5. Rastreia **cliques** (redirector próprio) e, na fase 2, **conversões/comissões**.
 
 ## Objetivo
 
-Validar com um MVP o fluxo completo (manual) → depois automatizar coleta, filtros,
-IA no copy e virar SaaS multi-tenant.
+Validar o fluxo completo manualmente (MVP) → automatizar coleta e filtros → IA no texto → SaaS multi-tenant.
 
 ## Canais
 
-- **Telegram** (canal): **API oficial**, sem risco de ban. É o canal do MVP.
-- **WhatsApp** (grupo): só com API não oficial (Baileys/Evolution) — **risco de banimento**.
-  Entra na fase 3 com chip separado, aquecimento do número e pacing.
+| Canal | Como | Risco |
+|-------|------|-------|
+| **Telegram** (canal) | Bot API oficial | Nenhum de ban. Canal do MVP. |
+| **WhatsApp** (grupo) | Só API não oficial (Baileys/Evolution) | **Ban permanente possível.** Fase 3, chip separado. |
 
-## Lojas do MVP
+## Lojas
 
-| Loja | Descoberta | Link de afiliado |
-|------|-----------|------------------|
-| Shopee | página produto / API de oferta | `generateShortLink` (GraphQL, appId/secret) |
-| AliExpress | página produto / OPEN Platform | TOP API (`appKey`/`secret` + `trackingId`) |
-| Amazon | página produto (JSON-LD) | tag `?tag=` (SiteStripe); Creators API pluga depois |
+| Loja | Dados do produto | Link de afiliado | Status |
+|------|------------------|------------------|--------|
+| Amazon | scrape leve da página (JSON-LD, `productTitle`, `og:*`) | `/dp/{ASIN}?tag=` | ✅ em uso |
+| Shopee | página do produto (JSON-LD / meta) | GraphQL `generateShortLink` | ⏳ falta credencial |
+| AliExpress | TOP API `productdetail.get` → fallback página | TOP API `link.generate` | ⏳ falta credencial |
 
-## Modelo de receita
+## Receita
 
-Comissão por venda gerada nos links de afiliado. Medida via:
-- cliques no redirector próprio (`/c/{postId}`)
-- relatório de conversão da rede (Shopee `conversionReport`, AliExpress `order.list`, Amazon reporting) cruzado por **subID único por post**.
+Comissão das lojas sobre vendas pelos links. Medição:
+- **Cliques:** redirector `/c/{postId}` (exige `PUBLIC_BASE_URL`, ver [[07 - Operação]]).
+- **Vendas (fase 2):** relatório de conversão de cada rede cruzado pelo `subId` do post
+  (Shopee `conversionReport`, AliExpress `order.list`, relatório da Amazon).
 
 ## Não-objetivos no MVP
 
-- Sem LLM no copy (templates determinísticos; IA vira fase 3).
-- Sem scraping em massa ainda (coleção manual no painel).
-- Sem WhatsApp ainda.
+- LLM no texto (templates determinísticos — ver D4 em [[06 - Decisões e Log]]).
+- Coleta automática em massa (entra na fase 2).
+- WhatsApp.
+
+## Obrigações
+
+- Todo post e o site identificam **publicidade/link de afiliado** (CONAR). Template termina com "📌 Anúncio"; site tem aviso no rodapé.
+- Cliques guardam só `referrer` — **nenhum IP ou dado pessoal** (LGPD).
