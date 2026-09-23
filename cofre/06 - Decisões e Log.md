@@ -33,6 +33,10 @@
 - **2026-09-23** — identidade visual (D14): logo oficial, tema escuro verde, ícones Lucide no lugar de emojis.
   Variantes da logo geradas por `python3 assets/brand/build.py` (recorte, fundo transparente, versão para fundo escuro, favicon, imagem de compartilhamento).
 - **2026-09-23** — botão de tema claro/escuro em todas as páginas; escolha salva no navegador, padrão segue o sistema.
+- **2026-09-23** — extrator da Amazon: preço perdia os centavos (`29.99` → 29), entidades `&#34;` no título; corrigido.
+  Preço antigo ("De:") segue sem extração. Após ~45 consultas seguidas a Amazon passou a devolver tela anti-robô:
+  scrape não escala para automação — caminho é a Creators API (10 vendas/30d). 10 mais vendidos agendados como
+  "MAIS VENDIDO NA AMAZON" (sem desconto, não chamados de oferta). Objetivo futuro: IA responsável pelos posts (fase 3).
 
 ## Regras de ouro
 

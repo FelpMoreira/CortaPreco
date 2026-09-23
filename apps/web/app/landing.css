@@ -290,6 +290,7 @@ body:has(.lp) {
   }
 }
 .lp-hero h1 {
+  text-wrap: balance;
   font-size: clamp(40px, 6.4vw, 70px);
   line-height: 1.02;
   letter-spacing: -0.05em;

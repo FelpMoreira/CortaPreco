@@ -149,6 +149,7 @@ export class AmazonProvider implements AffiliateProvider {
     }
 
     if (title === `Produto Amazon ${asin}`) title = titleFromSlug(resolved) ?? title;
+    title = decodeEntities(title.replace(/\s+/g, ' ').trim());
 
     return {
       storeProductId: asin,

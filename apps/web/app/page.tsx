@@ -177,11 +177,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
                 {featured?.postedAt ? `Última oferta ${since(featured.postedAt)}` : 'Ofertas novas todo dia'}
               </span>
               <h1>
-                Pague menos. <em>Sem garimpar.</em>
+                A gente corta o{'\u00a0'}preço.
+                <br />
+                <em>Você só aproveita.</em>
               </h1>
               <p className="lp-lead">
-                A gente vasculha a Shopee, o AliExpress e a Amazon, confere o preço e manda só o que vale a pena direto no
-                seu Telegram. Com cupom quando tem.
+                Garimpamos a Shopee, o AliExpress e a Amazon, conferimos cada preço e mandamos só o que vale a pena direto
+                no seu Telegram. Com cupom quando tem.
               </p>
               <div className="lp-cta">
                 {cta('Entrar no canal grátis')}

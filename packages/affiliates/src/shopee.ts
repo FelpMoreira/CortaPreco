@@ -182,7 +182,7 @@ export class ShopeeProvider implements AffiliateProvider {
     const ogImage = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)?.[1];
 
     const title =
-      (typeof jsonLd?.['name'] === 'string' ? (jsonLd['name'] as string) : null) ??
+      (typeof jsonLd?.['name'] === 'string' ? decodeEntities(jsonLd['name'] as string) : null) ??
       (ogTitle ? decodeEntities(ogTitle) : null) ??
       `Produto Shopee ${itemId}`;
 
