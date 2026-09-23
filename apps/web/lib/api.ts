@@ -11,9 +11,9 @@ export async function api<T = unknown>(path: string, init?: RequestInit): Promis
     },
     cache: 'no-store',
   });
+  const body = (await res.json().catch(() => null)) as ({ ok?: boolean; error?: string } & T) | null;
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`API ${res.status} ${path}: ${body.slice(0, 300)}`);
+    throw new Error(body?.error ?? `API ${res.status} ${path}`);
   }
-  return (await res.json()) as T;
+  return body as T;
 }

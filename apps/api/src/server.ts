@@ -45,28 +45,32 @@ export function buildServer(): FastifyInstance {
   });
 
   // ---------- preview (admin) ----------
-  app.post('/api/preview', async (req) => {
+  app.post('/api/preview', async (req, reply) => {
     try {
       void requireAdminKey(req);
     } catch (e) {
-      return { ok: false, error: (e as Error).message };
+      return reply.code(401).send({ ok: false, error: (e as Error).message });
     }
     const { url, messageOverride } = req.body as { url: string; messageOverride?: string };
-    if (!url) return { ok: false, error: 'URL obrigatória' };
+    if (!url) return reply.code(400).send({ ok: false, error: 'URL obrigatória' });
 
-    const product = await createProductFromUrl(url);
-    const message =
-      messageOverride ??
-      renderMessage({
-        store: product.store as 'SHOPEE' | 'ALIEXPRESS' | 'AMAZON',
-        title: product.title,
-        price: Number(product.price),
-        oldPrice: product.oldPrice ? Number(product.oldPrice) : null,
-        coupon: product.coupon,
-        discountPct: product.discountPct,
-        affiliateUrl: 'link-afiliado-ser-gerado-no-agendamento',
-      });
-    return { ok: true, product, message };
+    try {
+      const product = await createProductFromUrl(url);
+      const message =
+        messageOverride ??
+        renderMessage({
+          store: product.store as 'SHOPEE' | 'ALIEXPRESS' | 'AMAZON',
+          title: product.title,
+          price: Number(product.price),
+          oldPrice: product.oldPrice ? Number(product.oldPrice) : null,
+          coupon: product.coupon,
+          discountPct: product.discountPct,
+          affiliateUrl: 'link-afiliado-ser-gerado-no-agendamento',
+        });
+      return { ok: true, product, message };
+    } catch (e) {
+      return reply.code(400).send({ ok: false, error: (e as Error).message });
+    }
   });
 
   // ---------- produtos (admin) ----------

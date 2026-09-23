@@ -109,22 +109,27 @@ function NewOffer({ onError, onOk }: { onError: (s: string) => void; onOk: (s: s
     if (!url) return;
     setLoading(true);
     onError('');
+    onOk('');
     try {
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
       });
-      const json = (await res.json()) as ApiResponse<{ product: ProductRow; message: string }>;
-      if (!json.ok) {
-        onError(json.error ?? 'Falha no preview');
+      const json = (await res.json()) as { ok: boolean; error?: string; product?: ProductRow; message?: string };
+      if (!res.ok || !json.ok) {
+        onError(json.error ?? `Falha no preview (HTTP ${res.status}${res.status === 502 ? ' — API offline? rode ' : ''})`);
         return;
       }
-      setProduct(json.data!.product);
-      setMessage(json.data!.message);
+      if (!json.product) {
+        onError('Resposta sem produto');
+        return;
+      }
+      setProduct(json.product);
+      setMessage(json.message ?? '');
       onOk('Preview gerado. Confere os dados e agenda.');
-    } catch (e) {
-      onError((e as Error).message);
+    } catch {
+      onError('Falha no preview — a API está no ar? (rode npm run dev:api)');
     } finally {
       setLoading(false);
     }
@@ -134,23 +139,24 @@ function NewOffer({ onError, onOk }: { onError: (s: string) => void; onOk: (s: s
     if (!product) return;
     setScheduling(true);
     onError('');
+    onOk('');
     try {
       const res = await fetch('/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ productId: product.id, messageOverride: message }),
       });
-      const json = (await res.json()) as ApiResponse<{ post: PostRow }>;
-      if (!json.ok) {
-        onError(json.error ?? 'Falha ao agendar');
+      const json = (await res.json()) as { ok: boolean; error?: string; post?: PostRow };
+      if (!res.ok || !json.ok || !json.post) {
+        onError(json.error ?? `Falha ao agendar (HTTP ${res.status})`);
         return;
       }
-      onOk(`Post agendado (${json.data!.post.id}). O scheduler envia logo.`);
+      onOk(`Post agendado (${json.post.id}). O scheduler envia logo.`);
       setProduct(null);
       setMessage('');
       setUrl('');
-    } catch (e) {
-      onError((e as Error).message);
+    } catch {
+      onError('Falha ao agendar — a API está no ar? (rode npm run dev:api)');
     } finally {
       setScheduling(false);
     }
