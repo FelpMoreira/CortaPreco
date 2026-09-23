@@ -13,6 +13,52 @@ interface AmazonCredentials {
  * - Enrich: scrape leve da página (JSON-LD), com fallback no título derivado da URL.
  * - Creators API (exige 10 vendas qualificadas em 30d) é plugável aqui depois.
  */
+/**
+ * Tenta extrair o título da página quando não há JSON-LD (a Amazon às vezes
+ * entrega página "sem dados estruturados"). Ordem: productTitle → og:title →
+ * estado JS (`"title"`/`"productTitle"`) → <title>.
+ */
+function extractProductTitle(html: string): string | null {
+  const clean = (s: string): string => decodeEntities(s.replace(/\s+/g, ' ').trim());
+
+  const span = html.match(/<span[^>]+id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i)?.[1];
+  if (span) return clean(span);
+
+  const meta =
+    html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1] ??
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i)?.[1];
+  if (meta) return clean(meta);
+
+  const jsonTitle = html.match(/"(?:title|productTitle)"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1];
+  if (jsonTitle) {
+    const unescaped = jsonTitle
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/\\"/g, '"')
+      .replace(/\\\//g, '/');
+    return clean(unescaped);
+  }
+
+  const titleTag = html.match(/<title>([\s\S]*?)<\/title>/i)?.[1];
+  if (titleTag) return clean(titleTag.replace(/:\s*Amazon\.com\.br.*$/i, ''));
+
+  return null;
+}
+
+/** Último recurso: deriva um título legível do slug da URL (/nome-do-produto/dp/ASIN). */
+function titleFromSlug(url: string): string | null {
+  try {
+    const path = decodeURIComponent(new URL(url).pathname).split('/').filter(Boolean);
+    const asinIdx = path.findIndex(
+      (p, i) => /^[A-Z0-9]{10}$/.test(p) && ['dp', 'd', 'gp', 'product'].includes(path[i - 1]?.toLowerCase() ?? ''),
+    );
+    const seg = asinIdx > 1 ? path[asinIdx - 2]! : path[0] ?? '';
+    const title = seg.replace(/-+/g, ' ').trim();
+    return title.length > 4 ? title : null;
+  } catch {
+    return null;
+  }
+}
+
 export class AmazonProvider implements AffiliateProvider {
   readonly store = 'AMAZON' as Store;
 
@@ -86,11 +132,14 @@ export class AmazonProvider implements AffiliateProvider {
           parseBRL(html.match(/"priceToPay"\s*:[^}]*?"amount"\s*:\s*"?([\d.,]+)/i)?.[1] ?? '');
       }
       oldPrice = parseBRL(html.match(/"priceAmountOriginal"\s*:\s*"?([\d.,]+)/i)?.[1] ?? '');
+
+      // sem JSON-LD (página bloqueada por bot-check): tenta metadados/estado JS
+      if (!jsonLd) title = extractProductTitle(html) ?? title;
     } catch {
-      // descobre título via slug da URL
-      const slug = new URL(resolved).pathname.split('/').filter(Boolean)[0] ?? '';
-      if (slug) title = decodeEntities(slug.split('-').join(' '));
+      /* segue para os fallbacks abaixo */
     }
+
+    if (title === `Produto Amazon ${asin}`) title = titleFromSlug(resolved) ?? title;
 
     return {
       storeProductId: asin,
