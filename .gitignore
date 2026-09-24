@@ -13,3 +13,4 @@ prisma/*.db
 # cofre: versionado, exceto credenciais e estado local do Obsidian
 cofre/03 - Credenciais.md
 cofre/.obsidian/workspace*.json
+cofre/.obsidian/
