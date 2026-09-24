@@ -74,6 +74,7 @@ export class ProviderRegistry {
 }
 
 export type { AffiliateProvider, ProductData, AffiliateLinkResult, Store };
+export type { DiscoverOptions, DiscoveredProduct } from './types.js';
 
 class AffiliateErrorLib extends globalThis.Error {
   constructor(url: string) {

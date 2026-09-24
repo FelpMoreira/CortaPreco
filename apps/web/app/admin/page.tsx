@@ -5,11 +5,13 @@ import { LuExternalLink, LuLogOut } from 'react-icons/lu';
 import { Toast, type Notify, type ProductRow } from './_ui/common';
 import { OfferEditor } from './_ui/OfferEditor';
 import { MetricsTab, PostsTab, ProductsTab } from './_ui/Tabs';
+import { SuggestionsTab } from './_ui/Suggestions';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
-type Tab = 'nova' | 'posts' | 'produtos' | 'metricas';
+type Tab = 'sugestoes' | 'nova' | 'posts' | 'produtos' | 'metricas';
 
 const TABS: [Tab, string][] = [
+  ['sugestoes', 'Sugestões'],
   ['nova', 'Nova oferta'],
   ['posts', 'Posts'],
   ['produtos', 'Produtos'],
@@ -67,6 +69,7 @@ export default function AdminDashboard() {
       <div hidden={tab !== 'nova'}>
         <OfferEditor initial={draft} notify={notify} onScheduled={() => setDraft(null)} />
       </div>
+      {tab === 'sugestoes' && <SuggestionsTab notify={notify} />}
       {tab === 'posts' && <PostsTab notify={notify} />}
       {tab === 'produtos' && (
         <ProductsTab

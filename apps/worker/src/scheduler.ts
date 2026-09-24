@@ -9,6 +9,18 @@ export const publishQueue = new Queue('publish', { connection: { url: config.red
  * respeitando teto por hora/dia e um intervalo mínimo entre posts (espalha os
  * envios na hora em vez de disparar em rajada).
  */
+const brHour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23' });
+
+/** true dentro da janela de silêncio (ex.: "23-7" = das 23h às 6h59, horário de Brasília). */
+export function inQuietHours(spec: string, date = new Date()): boolean {
+  const m = spec.trim().match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+  if (!m) return false;
+  const [start, end] = [Number(m[1]) % 24, Number(m[2]) % 24];
+  if (start === end) return false;
+  const h = Number(brHour.format(date));
+  return start < end ? h >= start && h < end : h >= start || h < end;
+}
+
 export async function tickScheduler(): Promise<void> {
   const now = Date.now();
   const hourAgo = new Date(now - 60 * 60 * 1000);
@@ -30,7 +42,10 @@ export async function tickScheduler(): Promise<void> {
   ]);
 
   if (inFlight > 0) return;
-  if (perHour >= config.postsPerHour || perDay >= config.postsPerDay) return;
+  // madrugada: ninguém quer notificação; o "postar agora" do painel ignora isso de propósito
+  if (config.quietHours && inQuietHours(config.quietHours)) return;
+  // teto diário é opcional (0 = sem teto): o Telegram só limita velocidade, não volume por dia
+  if (perHour >= config.postsPerHour || (config.postsPerDay > 0 && perDay >= config.postsPerDay)) return;
   if (last?.postedAt && now - last.postedAt.getTime() < minGapMs) return;
 
   const pending = await prisma.post.findFirst({
@@ -50,7 +65,8 @@ export async function tickScheduler(): Promise<void> {
     'publish',
     { postId: pending.id },
     {
-      jobId: pending.id,
+      // único por tentativa: um job antigo com falha no Redis não pode bloquear o reenvio
+      jobId: `${pending.id}-${Date.now()}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
       removeOnComplete: true,

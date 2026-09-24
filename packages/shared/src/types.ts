@@ -61,4 +61,6 @@ export interface MessageInput {
   coupon: string | null;
   affiliateUrl: string;
   discountPct?: number | null;
+  /** Frase de chamada (escrita pela curadoria). Nunca contém números: preço vem do banco. */
+  hook?: string | null;
 }

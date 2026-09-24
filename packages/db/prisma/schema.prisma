@@ -29,6 +29,8 @@ model Product {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   posts          Post[]
+  suggestions    Suggestion[]
+  priceHistory   PriceSnapshot[]
 
   @@unique([tenantId, store, storeProductId])
   @@index([status])
@@ -81,4 +83,34 @@ model Channel {
 model AppConfig {
   key   String @id
   value String
+}
+
+// Preço visto a cada coleta/preview: base para detectar desconto falso.
+model PriceSnapshot {
+  id        String   @id @default(cuid())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  price     Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  @@index([productId, createdAt])
+}
+
+// Produto que a curadoria (regras ou IA) sugeriu postar. Aprovada → vira Post.
+model Suggestion {
+  id         String    @id @default(cuid())
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId  String
+  source     String    // AMAZON_MANUAL | SHOPEE_API | ALIEXPRESS_API
+  curator    String    // "rules" ou "claude:<modelo>"
+  score      Int       // 0-100
+  reason     String    // por que foi escolhido (para o admin decidir)
+  hook       String?   // frase de chamada escrita pela IA (sem números)
+  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  postId     String?
+  createdAt  DateTime  @default(now())
+  decidedAt  DateTime?
+
+  @@index([status, createdAt])
+  @@index([productId])
 }

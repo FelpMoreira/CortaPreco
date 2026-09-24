@@ -18,6 +18,8 @@
 | D12 | Fronteira da API | Só o servidor do Next chama a API admin; navegador nunca vê a `ADMIN_API_KEY` | Uma chave vazada não pode vir do front |
 | D13 | Cofre | Versionado no git, **exceto** a nota 03 | Contexto do projeto precisa viajar com o código |
 | D14 | Identidade visual | **Verdes da logo** (`#0b2219` + `#22a06e`), tema escuro e claro com botão em todas as páginas; logo oficial em `assets/brand/`; ícones Lucide (`react-icons/lu`), sem emoji na interface | Marca CortaPreço; emoji só dentro da mensagem do Telegram |
+| D15 | IA nos posts | Fluxo (não agente): regras filtram → `Curator` escolhe e escreve chamada → **aprovação humana** → scheduler. Provedor trocável; padrão `rules` | Custo previsível, auditável; provedor de IA ainda em avaliação de preço |
+| D16 | Ritmo no Telegram | **Sem teto diário** (`POSTS_PER_DAY=0`), 3/h espaçados e **silêncio 23h–7h** (`QUIET_HOURS`) | Telegram só limita velocidade; o que incomoda o público é rajada e madrugada. Teto diário volta para WhatsApp |
 
 ## Log
 
@@ -38,10 +40,18 @@
   scrape não escala para automação — caminho é a Creators API (10 vendas/30d). 10 mais vendidos agendados como
   "MAIS VENDIDO NA AMAZON" (sem desconto, não chamados de oferta). Objetivo futuro: IA responsável pelos posts (fase 3).
 
+- **2026-09-23** — curadoria com IA (D15): aba Sugestões, lote de links, coletores Shopee/AliExpress, histórico de preço.
+  Amazon automática descartada até a Creators API (Condições de Uso proíbem robôs; risco à conta de associado).
+  Botão "Postar agora" (pula fila/intervalo, respeita teto diário). Corrigido: job de reenvio ignorado pelo BullMQ
+  por reaproveitar o id do job com falha; upsert zerava preço quando a loja bloqueava.
+
+- **2026-09-24** — fila parou: os 10 posts de 23/09 (14h40–17h40) lotaram o teto de 10 em janela móvel de 24h.
+  Teto diário virou opcional e foi desligado; entrou a janela de silêncio 23h–7h (D16). Fila retomou às 13h22.
+
 ## Regras de ouro
 
 1. **Números nunca vêm de IA** — texto pode ser gerado; preço/desconto vêm do banco.
-2. **Teto de posts** — anti-spam é o que mantém o canal (e depois o número do WhatsApp) vivo.
+2. **Ritmo, não rajada** — Telegram: espaçamento + silêncio de madrugada. WhatsApp (fase 3): teto diário rígido, é o que evita ban.
 3. **subID único por post** — é a chave para atribuir venda a post.
 4. **`.env` nunca versionado**; segredos só nele (status em [[03 - Credenciais]]).
 5. **Todo post se identifica como anúncio** (CONAR).

@@ -22,7 +22,13 @@ que injeta a chave (ver [[08 - Segurança]]).
 | GET | `/api/posts` | `?status=SCHEDULED\|POSTING\|POSTED\|FAILED\|CANCELED` | `{ posts, publicBaseUrl }` |
 | POST | `/api/posts` | `{ productId, messageOverride? }` (≤3500, use `{link}`) | `{ post }` — 400 se sem preço |
 | POST | `/api/posts/:id/cancel` | — | só SCHEDULED |
+| POST | `/api/posts/:id/publish` | — | **Postar agora**: só SCHEDULED; pula fila e intervalo, respeita `POSTS_PER_DAY` |
 | POST | `/api/posts/:id/requeue` | — | só FAILED/CANCELED, sem outro pendente do mesmo produto |
+| GET | `/api/suggestions` | `?status=PENDING\|APPROVED\|REJECTED` | `{ suggestions, curator, discoverSources, running }` |
+| POST | `/api/suggestions/batch` | `{ urls: string[] }` (1–15) | enfileira lote para o worker buscar e curar |
+| POST | `/api/suggestions/discover` | — | busca nas APIs oficiais (Shopee/AliExpress) — 400 se nenhuma configurada |
+| POST | `/api/suggestions/:id/approve` | `{ hook?, publishNow? }` | agenda (ou posta já) com a chamada; hook validado sem números |
+| POST | `/api/suggestions/:id/reject` | — | só PENDING |
 | GET | `/api/stats` | — | `clicks, clicks24h, scheduled, posted, posted24h, failed, postedWithClicks, top[5]` |
 
 ## Mensagem

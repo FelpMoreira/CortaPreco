@@ -10,8 +10,11 @@ const ALLOWED: [method: string, path: RegExp][] = [
   ['PATCH', new RegExp(`^products/${ID}$`)],
   ['GET', /^posts$/],
   ['POST', /^posts$/],
-  ['POST', new RegExp(`^posts/${ID}/(cancel|requeue)$`)],
+  ['POST', new RegExp(`^posts/${ID}/(cancel|requeue|publish)$`)],
   ['GET', /^stats$/],
+  ['GET', /^suggestions$/],
+  ['POST', /^suggestions\/(batch|discover)$/],
+  ['POST', new RegExp(`^suggestions/${ID}/(approve|reject)$`)],
 ];
 
 async function handle(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {

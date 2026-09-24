@@ -1,6 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { Store } from '@cupons/shared';
-import { AffiliateError, type AffiliateLinkResult, type AffiliateProvider, type ProductData } from './types.js';
+import {
+  AffiliateError,
+  type AffiliateLinkResult,
+  type AffiliateProvider,
+  type DiscoverOptions,
+  type DiscoveredProduct,
+  type ProductData,
+} from './types.js';
 import { parseBRL, extractJsonLdProduct, decodeEntities } from './utils.js';
 
 const ENDPOINT = 'https://open-api.affiliate.shopee.com.br/graphql';
@@ -28,6 +35,44 @@ const generateShortLinkQuery = /* GraphQL */ `
     }
   }
 `;
+
+// sortType 2 = mais vendidos. Campos conforme productOfferV2 (Open API de afiliados).
+const productOfferQuery = /* GraphQL */ `
+  query ProductOffers($keyword: String, $sortType: Int, $page: Int, $limit: Int) {
+    productOfferV2(keyword: $keyword, sortType: $sortType, page: $page, limit: $limit) {
+      nodes {
+        itemId
+        shopId
+        productName
+        imageUrl
+        priceMin
+        priceDiscountRate
+        ratingStar
+        sales
+        commissionRate
+        productLink
+      }
+      pageInfo {
+        page
+        limit
+        hasNextPage
+      }
+    }
+  }
+`;
+
+interface ShopeeOfferNode {
+  itemId: number | string;
+  shopId: number | string;
+  productName: string;
+  imageUrl?: string | null;
+  priceMin?: string | null;
+  priceDiscountRate?: number | null;
+  ratingStar?: string | null;
+  sales?: number | null;
+  commissionRate?: string | null;
+  productLink?: string | null;
+}
 
 export class ShopeeProvider implements AffiliateProvider {
   readonly store = 'SHOPEE' as Store;
@@ -157,6 +202,37 @@ export class ShopeeProvider implements AffiliateProvider {
         'GENERIC',
       );
     }
+  }
+
+  /** Ofertas pela Open API (NOTA: validar o contrato com a credencial real). */
+  async discover(opts: DiscoverOptions): Promise<DiscoveredProduct[]> {
+    const data = await this.graphql<{ productOfferV2: { nodes: ShopeeOfferNode[] } }>(
+      productOfferQuery,
+      { keyword: opts.keyword ?? null, sortType: 2, page: opts.page ?? 1, limit: opts.limit },
+      'productOfferV2',
+    );
+    return data.productOfferV2.nodes.flatMap((n): DiscoveredProduct[] => {
+      const price = Number(n.priceMin);
+      if (!Number.isFinite(price) || price <= 0) return [];
+      const rate = n.priceDiscountRate ?? 0;
+      return [
+        {
+          storeProductId: `${n.shopId}.${n.itemId}`,
+          title: decodeEntities(n.productName),
+          price,
+          // a API dá preço atual e taxa de desconto: original = atual / (1 - taxa)
+          oldPrice: rate > 0 && rate < 100 ? Math.round((price / (1 - rate / 100)) * 100) / 100 : null,
+          discountPct: rate > 0 ? rate : null,
+          coupon: null,
+          imageUrl: n.imageUrl ?? null,
+          category: null,
+          rating: n.ratingStar ? Number(n.ratingStar) || null : null,
+          sales: n.sales ?? null,
+          url: n.productLink || `https://shopee.com.br/product/${n.shopId}/${n.itemId}`,
+          commissionRate: n.commissionRate ? Number(n.commissionRate) || null : null,
+        },
+      ];
+    });
   }
 
   /**

@@ -62,7 +62,8 @@ CANCELED ──reenviar──► SCHEDULED
 
 ## Anti-spam
 
-- Teto `POSTS_PER_HOUR` e `POSTS_PER_DAY` (janela móvel, só conta POSTED).
+- Teto `POSTS_PER_HOUR` e, opcional, `POSTS_PER_DAY` (janela móvel de 24h; `0` = sem teto — o Telegram não limita volume diário).
+- Janela de silêncio `QUIET_HOURS` (ex.: `23-7`, horário de Brasília): o scheduler não posta; o "postar agora" do painel ignora.
 - Intervalo mínimo entre posts = 60 min ÷ `POSTS_PER_HOUR` (3/h → um a cada 20 min).
 - Um envio por vez + pausa de 1,2–2s antes de cada envio.
 

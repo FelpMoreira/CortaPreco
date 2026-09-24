@@ -31,12 +31,16 @@ export const LINK_PLACEHOLDER = '{link}';
 function buildLines(input: MessageInput): string[] {
   const lines: string[] = [];
 
-  lines.push(`${storeEmoji[input.store]} <b>OFERTA ${STORE_LABELS[input.store].toUpperCase()}</b>`);
+  const hasDiscount = !!input.oldPrice && input.oldPrice > input.price;
+  const store = STORE_LABELS[input.store].toUpperCase();
+  // só chama de oferta o que tem desconto de verdade; o resto é "achado"
+  lines.push(`${storeEmoji[input.store]} <b>${hasDiscount ? `OFERTA ${store}` : `ACHADO NA ${store}`}</b>`);
   lines.push('');
   lines.push(`<b>${er(input.title)}</b>`);
+  if (input.hook) lines.push(`<i>${er(input.hook)}</i>`);
   lines.push('');
 
-  if (input.oldPrice && input.oldPrice > input.price) {
+  if (hasDiscount && input.oldPrice) {
     const pct =
       input.discountPct ??
       Math.round(((input.oldPrice - input.price) / input.oldPrice) * 100);

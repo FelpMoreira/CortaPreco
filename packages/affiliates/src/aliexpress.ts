@@ -1,9 +1,48 @@
 import { createHmac } from 'node:crypto';
 import type { Store } from '@cupons/shared';
-import { AffiliateError, type AffiliateLinkResult, type AffiliateProvider, type ProductData } from './types.js';
+import {
+  AffiliateError,
+  type AffiliateLinkResult,
+  type AffiliateProvider,
+  type DiscoverOptions,
+  type DiscoveredProduct,
+  type ProductData,
+} from './types.js';
 import { extractJsonLdProduct } from './utils.js';
 
 const ENDPOINT = 'https://api-sg.aliexpress.com/sync';
+
+const PRODUCT_FIELDS =
+  'product_id,product_title,product_main_image_url,target_sale_price,target_original_price,discount,evaluate_rate,lastest_volume,product_detail_url,first_level_category_name,commission_rate';
+
+const pct = (v: unknown) => (typeof v === 'string' ? Number(v.replace('%', '')) : Number(v));
+
+/** Campos da API de afiliados (snake_case) → nosso formato. */
+function mapProduct(p: Record<string, unknown>): DiscoveredProduct | null {
+  const price = Number(p['target_sale_price']);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  const original = Number(p['target_original_price']);
+  const discount = pct(p['discount']);
+  const evaluate = pct(p['evaluate_rate']); // % de avaliações positivas → escala 0-5
+  const commission = pct(p['commission_rate']);
+  const id = String(p['product_id']);
+  return {
+    storeProductId: id,
+    title: String(p['product_title'] ?? `Produto AliExpress ${id}`),
+    price,
+    oldPrice: Number.isFinite(original) && original > price ? original : null,
+    discountPct: Number.isFinite(discount) && discount > 0 ? Math.round(discount) : null,
+    coupon: null,
+    imageUrl: p['product_main_image_url'] ? String(p['product_main_image_url']) : null,
+    category: p['first_level_category_name'] ? String(p['first_level_category_name']) : null,
+    rating: Number.isFinite(evaluate) && evaluate > 0 ? Math.round((evaluate / 20) * 100) / 100 : null,
+    sales: Number(p['lastest_volume']) || null,
+    url: String(p['product_detail_url'] ?? `https://pt.aliexpress.com/item/${id}.html`),
+    commissionRate: Number.isFinite(commission) && commission > 0 ? commission / 100 : null,
+  };
+}
+
+type ProductsResult = { products?: { product?: Array<Record<string, unknown>> } };
 
 interface AliExpressCredentials {
   appKey: string;
@@ -75,7 +114,14 @@ export class AliExpressProvider implements AffiliateProvider {
     }
 
     const json = (await res.json()) as Record<string, unknown>;
-    const response = json[`${method}_response`] as { result?: unknown; code?: number; msg?: string } | undefined;
+    // a chave da resposta usa sublinhados: aliexpress_affiliate_link_generate_response
+    const response = json[`${method.replace(/\./g, '_')}_response`] as
+      | { result?: unknown; resp_result?: { resp_code?: number; resp_msg?: string; result?: unknown }; code?: number; msg?: string }
+      | undefined;
+    const errorResponse = (json['error_response'] ?? null) as { code?: string; msg?: string } | null;
+    if (errorResponse) {
+      throw new AffiliateError(`AliExpress erro ${errorResponse.code}: ${errorResponse.msg ?? ''}`, 'ALIEXPRESS', 'API_ERROR');
+    }
     if (response?.code && Number(response.code) !== 0) {
       throw new AffiliateError(
         `AliExpress erro ${response.code}: ${response.msg ?? 'sem mensagem'}`,
@@ -83,7 +129,11 @@ export class AliExpressProvider implements AffiliateProvider {
         'API_ERROR',
       );
     }
-    return response?.result ?? json;
+    const resp = response?.resp_result;
+    if (resp?.resp_code && Number(resp.resp_code) !== 200) {
+      throw new AffiliateError(`AliExpress ${resp.resp_code}: ${resp.resp_msg ?? ''}`, 'ALIEXPRESS', 'API_ERROR');
+    }
+    return resp?.result ?? response?.result ?? json;
   }
 
   private extractItemId(url: string): string {
@@ -95,22 +145,20 @@ export class AliExpressProvider implements AffiliateProvider {
   }
 
   async affiliateLink(url: string, subId?: string): Promise<AffiliateLinkResult> {
+    // NOTA: o subID por post ainda não vai para o AliExpress (a atribuição é pelo tracking_id);
+    // guardamos no post para cruzar depois quando o formato de sub-id for validado.
     const sub = subId ?? 'cupons';
     const itemId = this.extractItemId(url);
 
     try {
+      // parâmetros oficiais (snake_case); 0 = link normal de afiliado
       const result = (await this.call('aliexpress.affiliate.link.generate', {
-        promotionLinks: [
-          {
-            sourceValues: [url],
-            trackingId: this.creds.trackingId,
-            promotionLinkType: 'SHORT_LINK',
-            subIds: [sub],
-          },
-        ],
-      })) as { promotionLinks?: { promotionLink?: string }[] };
+        promotion_link_type: '0',
+        source_values: url,
+        tracking_id: this.creds.trackingId,
+      })) as { promotion_links?: { promotion_link?: Array<{ promotion_link?: string }> } };
 
-      const affiliateUrl = result.promotionLinks?.[0]?.promotionLink;
+      const affiliateUrl = result.promotion_links?.promotion_link?.[0]?.promotion_link;
       if (!affiliateUrl) {
         // Se a API não retornar link, monta via promo a partir do itemId
         throw new AffiliateError(
@@ -126,30 +174,40 @@ export class AliExpressProvider implements AffiliateProvider {
     }
   }
 
+  /** Produtos em alta pela API de afiliados (NOTA: validar o contrato com a credencial real). */
+  async discover(opts: DiscoverOptions): Promise<DiscoveredProduct[]> {
+    const result = (await this.call('aliexpress.affiliate.hotproduct.query', {
+      fields: PRODUCT_FIELDS,
+      page_no: String(opts.page ?? 1),
+      page_size: String(opts.limit),
+      sort: 'LAST_VOLUME_DESC',
+      target_currency: 'BRL',
+      target_language: 'PT',
+      ship_to_country: 'BR',
+      tracking_id: this.creds.trackingId,
+      ...(opts.keyword ? { keywords: opts.keyword } : {}),
+    })) as ProductsResult;
+    return (result.products?.product ?? []).flatMap((p) => mapProduct(p) ?? []);
+  }
+
   async enrich(url: string): Promise<ProductData> {
     const itemId = this.extractItemId(url);
 
     try {
       const result = (await this.call('aliexpress.affiliate.productdetail.get', {
-        itemIds: [itemId],
-        fields: ['subject', 'item_url', 'productMainImage', 'target_app_sale_price', 'sale_price', 'sale_price_currency'],
-      })) as { products?: Array<Record<string, unknown>> };
+        product_ids: itemId,
+        fields: PRODUCT_FIELDS,
+        target_currency: 'BRL',
+        target_language: 'PT',
+        country: 'BR',
+        tracking_id: this.creds.trackingId,
+      })) as ProductsResult;
 
-      const p = result.products?.[0];
-      if (p) {
-        const price = Number(p['target_app_sale_price'] ?? p['sale_price'] ?? NaN);
-        return {
-          storeProductId: itemId,
-          title: String(p['subject'] ?? `Produto AliExpress ${itemId}`),
-          price: Number.isFinite(price) ? price : null,
-          oldPrice: null,
-          discountPct: null,
-          coupon: null,
-          imageUrl: p['productMainImage'] ? String(p['productMainImage']) : null,
-          category: null,
-          rating: Number(p['evaluateRate'] ?? NaN) || null,
-          sales: Number(p['soldQuantity'] ?? NaN) || null,
-        };
+      const p = result.products?.product?.[0];
+      const mapped = p ? mapProduct(p) : null;
+      if (mapped) {
+        const { url: _url, commissionRate: _c, ...data } = mapped;
+        return data;
       }
     } catch {
       /* fallback: página do produto */

@@ -33,7 +33,7 @@ const app = new Composer();
 
 // públicos: funcionam para qualquer pessoa (precisamos do /whoami para descobrir admins)
 app.command('start', (ctx) =>
-  ctx.reply('Bot do pipeline de ofertas. Comandos: /stats', { parse_mode: 'HTML' }),
+  ctx.reply('Bot do pipeline de ofertas. Comandos: /stats, /channel, /chatid, /whoami', { parse_mode: 'HTML' }),
 );
 
 app.command('whoami', (ctx) =>
@@ -66,14 +66,9 @@ app.command('stats', async (ctx) => {
 
 app.command('channel', (ctx) => ctx.reply(`Canal configurado: ${channel || '(não configurado)'}`));
 
-// em grupos, qualquer mensagem faz o bot revelar o chat id (usado no TELEGRAM_CHANNEL)
-app.on('message', (ctx) => {
-  const type = ctx.chat.type;
-  if (type === 'group' || type === 'supergroup') {
-    console.log(`[bot] ${type}: id=${ctx.chat.id}`);
-    void ctx.reply(`ID deste grupo: ${ctx.chat.id}`).catch(() => undefined);
-  }
-});
+// id do chat atual (para configurar TELEGRAM_CHANNEL). Só admin e só sob comando: o bot é
+// admin do grupo de ofertas e recebe todas as mensagens — responder a elas vira spam
+app.command('chatid', (ctx) => ctx.reply(`ID deste chat: ${ctx.chat.id}`));
 
 bot.use(app);
 

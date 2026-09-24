@@ -10,6 +10,8 @@ export const config = {
   publicBaseUrl: (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, ''),
   adminApiKey: process.env.ADMIN_API_KEY || '',
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+  /** Teto diário de posts: vale também para o "postar agora". */
+  postsPerDay: Number(process.env.POSTS_PER_DAY || 10),
 };
 
 /** Falha cedo se a configuração não é segura o bastante para subir. */

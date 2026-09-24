@@ -44,7 +44,7 @@ Mínimo para lançar (detalhes em [[08 - Segurança#Checklist de lançamento]]):
 | FAILED com `Telegram: Bad Request: can't parse entities` | HTML inválido na mensagem editada | Corrija as tags (`<b>…</b>`) e agende de novo |
 | FAILED `chat not found` / `not enough rights` | `TELEGRAM_CHANNEL` errado ou bot não é admin | Ajuste o canal / dê permissão de postar ao bot |
 | Post saiu sem foto | Legenda > 1024 caracteres ou imagem inacessível | Encurte o texto ou troque a URL da imagem |
-| Agendado e nada acontece | Worker parado, teto atingido ou intervalo mínimo | Veja `/stats` no bot e o log do worker |
+| Agendado e nada acontece | Worker parado, teto diário (janela **móvel** de 24h), intervalo mínimo ou janela de silêncio | Veja `/stats` no bot e o log do worker; `POSTS_PER_DAY=0` desliga o teto |
 | Preço R$ 0,00 / "sem preço" | Scrape bloqueado pela loja | Preencha o preço no painel |
 | "Nenhum provider configurado para a URL" | Loja sem credencial no `.env` | Ver [[03 - Credenciais]] |
 | Painel: "Muitas tentativas" | 5 senhas erradas em 15 min | Aguarde 15 min (ou reinicie o web em dev) |

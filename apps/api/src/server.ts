@@ -2,11 +2,17 @@ import { timingSafeEqual } from 'node:crypto';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import { prisma } from '@cupons/db';
+import { curatorFromEnv } from '@cupons/curator';
 import { config } from './config.js';
+import { curateQueue, type CurateJob } from './queue.js';
 import {
+  approveSuggestion,
   cancelPost,
+  publishNow,
   createProductFromUrl,
   defaultMessage,
+  registry,
+  rejectSuggestion,
   requeuePost,
   schedulePostForProduct,
   updateProduct,
@@ -220,9 +226,147 @@ export function buildServer(): FastifyInstance {
     }
   });
 
+  app.post('/api/posts/:id/publish', { schema: { params: idParams } }, async (req, reply) => {
+    try {
+      await publishNow((req.params as { id: string }).id);
+      return { ok: true };
+    } catch (e) {
+      return reply.code(400).send({ ok: false, error: (e as Error).message });
+    }
+  });
+
   app.post('/api/posts/:id/requeue', { schema: { params: idParams } }, async (req, reply) => {
     try {
       await requeuePost((req.params as { id: string }).id);
+      return { ok: true };
+    } catch (e) {
+      return reply.code(400).send({ ok: false, error: (e as Error).message });
+    }
+  });
+
+  // ---------- sugestões da curadoria (admin) ----------
+  const curatorName = curatorFromEnv(process.env as Record<string, string | undefined>).name;
+
+  app.get(
+    '/api/suggestions',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: { status: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] } },
+        },
+      },
+    },
+    async (req) => {
+      const { status = 'PENDING' } = req.query as { status?: string };
+      const suggestions = await prisma.suggestion.findMany({
+        where: { status },
+        orderBy: status === 'PENDING' ? [{ score: 'desc' }, { createdAt: 'desc' }] : { decidedAt: 'desc' },
+        take: 100,
+        include: {
+          product: {
+            select: {
+              id: true, store: true, title: true, imageUrl: true, price: true, oldPrice: true,
+              discountPct: true, coupon: true, url: true, rating: true, sales: true,
+            },
+          },
+        },
+      });
+      const [waiting, active] = await Promise.all([curateQueue.getWaitingCount(), curateQueue.getActiveCount()]);
+      return {
+        ok: true,
+        suggestions,
+        curator: curatorName,
+        discoverSources: registry.list().filter((p) => p.discover).map((p) => p.store),
+        running: waiting + active,
+      };
+    },
+  );
+
+  // lote de links colados pelo admin → worker busca devagar e a curadoria escolhe
+  app.post(
+    '/api/suggestions/batch',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['urls'],
+          additionalProperties: false,
+          properties: {
+            urls: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 15,
+              items: { type: 'string', minLength: 10, maxLength: 2048, pattern: '^https?://' },
+            },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const urls = [...new Set((req.body as { urls: string[] }).urls.map((u) => u.trim()))];
+      const unknown = urls.filter((u) => {
+        try {
+          registry.providerFor(u);
+          return false;
+        } catch {
+          return true;
+        }
+      });
+      if (unknown.length) {
+        return reply.code(400).send({ ok: false, error: `Loja não configurada para: ${unknown.slice(0, 3).join(', ')}` });
+      }
+      const job = await curateQueue.add('urls', { kind: 'urls', urls } satisfies CurateJob, {
+        removeOnComplete: 50,
+        removeOnFail: 50,
+      });
+      return { ok: true, jobId: job.id, count: urls.length };
+    },
+  );
+
+  app.post('/api/suggestions/discover', async (_req, reply) => {
+    if (!registry.list().some((p) => p.discover)) {
+      return reply.code(400).send({ ok: false, error: 'Nenhuma rede com API de descoberta configurada (Shopee/AliExpress)' });
+    }
+    const job = await curateQueue.add('discover', { kind: 'discover' } satisfies CurateJob, {
+      removeOnComplete: 50,
+      removeOnFail: 50,
+    });
+    return { ok: true, jobId: job.id };
+  });
+
+  app.post(
+    '/api/suggestions/:id/approve',
+    {
+      schema: {
+        params: idParams,
+        body: {
+          type: ['object', 'null'],
+          additionalProperties: false,
+          properties: {
+            hook: { type: ['string', 'null'], maxLength: 200 },
+            publishNow: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = (req.body ?? {}) as { hook?: string | null; publishNow?: boolean };
+      try {
+        return {
+          ok: true,
+          ...(await approveSuggestion(id, body.hook === '' ? null : body.hook, { publishNow: body.publishNow })),
+        };
+      } catch (e) {
+        return reply.code(400).send({ ok: false, error: (e as Error).message });
+      }
+    },
+  );
+
+  app.post('/api/suggestions/:id/reject', { schema: { params: idParams } }, async (req, reply) => {
+    try {
+      await rejectSuggestion((req.params as { id: string }).id);
       return { ok: true };
     } catch (e) {
       return reply.code(400).send({ ok: false, error: (e as Error).message });

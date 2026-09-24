@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { LuSend } from 'react-icons/lu';
 import { LINK_PLACEHOLDER, renderMessageHtml, type Store } from '@cupons/shared';
 import { CAPTION_LIMIT, telegramLength, telegramToSafeHtml } from '@/lib/telegram';
 import { adminFetch, Badge, brl, parseMoney, type Notify, type ProductRow } from './common';
@@ -102,7 +103,7 @@ export function OfferEditor({
   const textLen = telegramLength(message);
   const willDropPhoto = !!form?.imageUrl.trim() && textLen > CAPTION_LIMIT;
 
-  async function schedule() {
+  async function schedule(now = false) {
     if (!product || !form || problems.length) return;
     setSaving(true);
     try {
@@ -121,7 +122,16 @@ export function OfferEditor({
         method: 'POST',
         body: { productId: product.id, messageOverride: message },
       });
-      notify('success', `Post agendado. O scheduler publica respeitando o limite por hora. (${post.id.slice(-6)})`);
+      if (now) {
+        try {
+          await adminFetch(`posts/${post.id}/publish`, { method: 'POST' });
+          notify('success', 'Enviando para o canal agora.');
+        } catch (e) {
+          notify('error', `Agendado, mas não deu para postar agora: ${(e as Error).message}`);
+        }
+      } else {
+        notify('success', `Post agendado. O scheduler publica respeitando o limite por hora. (${post.id.slice(-6)})`);
+      }
       setProduct(null);
       setForm(null);
       setCustomMessage(null);
@@ -230,8 +240,11 @@ export function OfferEditor({
             {problems.length > 0 && <p className="err" style={{ margin: 0 }}>{problems.join(' · ')}</p>}
 
             <div className="row">
-              <button className="btn" onClick={() => void schedule()} disabled={saving || problems.length > 0}>
-                {saving ? 'Agendando…' : 'Agendar post'}
+              <button className="btn" onClick={() => void schedule(true)} disabled={saving || problems.length > 0}>
+                <LuSend size={14} /> {saving ? 'Enviando…' : 'Postar agora'}
+              </button>
+              <button className="btn ghost" onClick={() => void schedule()} disabled={saving || problems.length > 0}>
+                {saving ? 'Agendando…' : 'Agendar'}
               </button>
               <button
                 className="btn ghost"

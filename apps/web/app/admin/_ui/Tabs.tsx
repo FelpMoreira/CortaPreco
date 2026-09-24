@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { LuSend } from 'react-icons/lu';
 import { adminFetch, Badge, brl, fmtDate, STATUS_LABEL, Thumb, type Notify, type PostRow, type ProductRow } from './common';
 
 /** Carrega dados e recarrega sob demanda (e opcionalmente em intervalo). */
@@ -140,14 +141,17 @@ export function PostsTab({ notify }: { notify: Notify }) {
   const { data, loading, reload } = useLoad(fetchPosts, notify, 20_000);
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function act(p: PostRow, action: 'cancel' | 'requeue') {
+  async function act(p: PostRow, action: 'cancel' | 'requeue' | 'publish') {
     if (action === 'requeue' && p.lastError?.includes('interrompido')) {
       if (!window.confirm('Esse envio foi interrompido e pode ter chegado ao canal. Confira antes. Reenviar mesmo assim?')) return;
     }
     setBusy(p.id);
     try {
       await adminFetch(`posts/${p.id}/${action}`, { method: 'POST' });
-      notify('success', action === 'cancel' ? 'Post cancelado.' : 'Post voltou para a fila.');
+      notify(
+        'success',
+        action === 'cancel' ? 'Post cancelado.' : action === 'publish' ? 'Enviando para o canal agora.' : 'Post voltou para a fila.',
+      );
       await reload();
     } catch (e) {
       notify('error', (e as Error).message);
@@ -215,9 +219,14 @@ export function PostsTab({ notify }: { notify: Notify }) {
               </details>
               <div className="row">
                 {p.status === 'SCHEDULED' && (
-                  <button className="btn danger sm" disabled={busy === p.id} onClick={() => void act(p, 'cancel')}>
-                    Cancelar
-                  </button>
+                  <>
+                    <button className="btn sm" disabled={busy === p.id} onClick={() => void act(p, 'publish')}>
+                      <LuSend size={14} /> Postar agora
+                    </button>
+                    <button className="btn danger sm" disabled={busy === p.id} onClick={() => void act(p, 'cancel')}>
+                      Cancelar
+                    </button>
+                  </>
                 )}
                 {(p.status === 'FAILED' || p.status === 'CANCELED') && (
                   <button className="btn ghost sm" disabled={busy === p.id} onClick={() => void act(p, 'requeue')}>

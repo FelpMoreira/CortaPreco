@@ -1,67 +1,23 @@
 import { randomBytes } from 'node:crypto';
 import { escapeHtml, LINK_PLACEHOLDER, renderMessageHtml } from '@cupons/shared';
 import { ProviderRegistry } from '@cupons/affiliates';
-import { prisma, type Product as PrismaProduct } from '@cupons/db';
+import { prisma, recordPrice, upsertProduct, type Product as PrismaProduct } from '@cupons/db';
+import { sanitizeHook } from '@cupons/curator';
 import { config } from '../config.js';
+import { enqueuePublish } from '../queue.js';
 
 export const registry = ProviderRegistry.fromEnv(process.env as Record<string, string | undefined>);
-
-// Tenant do MVP (single-tenant). Nunca null: no Postgres, NULLs em índice único
-// não são considerados iguais, o que quebraria o dedup por produto.
-const TENANT = 'default';
-
-export interface EnrichedPreview {
-  product: PrismaProduct;
-  message: string;
-}
 
 /** Enriquece uma URL e faz upsert do produto (dedup por loja + storeProductId). */
 export async function createProductFromUrl(rawUrl: string): Promise<PrismaProduct> {
   const url = rawUrl.trim();
   const provider = registry.providerFor(url);
   const data = await provider.enrich(url);
-
-  return prisma.product.upsert({
-    where: {
-      tenantId_store_storeProductId: {
-        tenantId: TENANT,
-        store: provider.store,
-        storeProductId: data.storeProductId,
-      },
-    },
-    update: {
-      title: data.title,
-      price: data.price ?? 0,
-      oldPrice: data.oldPrice,
-      discountPct: data.discountPct,
-      coupon: data.coupon,
-      imageUrl: data.imageUrl,
-      category: data.category,
-      rating: data.rating,
-      sales: data.sales,
-      url,
-    },
-    create: {
-      store: provider.store,
-      storeProductId: data.storeProductId,
-      title: data.title,
-      price: data.price ?? 0,
-      oldPrice: data.oldPrice,
-      discountPct: data.discountPct,
-      coupon: data.coupon,
-      imageUrl: data.imageUrl,
-      category: data.category,
-      rating: data.rating,
-      sales: data.sales,
-      url,
-      status: 'NEW',
-      tenantId: TENANT,
-    },
-  });
+  return upsertProduct({ ...data, store: provider.store, url });
 }
 
-/** Mensagem padrão do produto, com o marcador no lugar do link. */
-export function defaultMessage(product: PrismaProduct): string {
+/** Mensagem padrão do produto, com o marcador no lugar do link (e a frase da curadoria, se houver). */
+export function defaultMessage(product: PrismaProduct, hook?: string | null): string {
   return renderMessageHtml({
     store: product.store as 'SHOPEE' | 'ALIEXPRESS' | 'AMAZON',
     title: product.title,
@@ -70,6 +26,7 @@ export function defaultMessage(product: PrismaProduct): string {
     coupon: product.coupon,
     discountPct: product.discountPct,
     affiliateUrl: LINK_PLACEHOLDER,
+    hook,
   });
 }
 
@@ -91,6 +48,7 @@ export async function updateProduct(id: string, patch: ProductPatch): Promise<Pr
   const oldPrice = patch.oldPrice === undefined ? (current.oldPrice ? Number(current.oldPrice) : null) : patch.oldPrice;
   const discountPct = oldPrice && oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : null;
 
+  if (patch.price !== undefined) await recordPrice(id, patch.price);
   return prisma.product.update({
     where: { id },
     data: {
@@ -109,6 +67,24 @@ export async function updateProduct(id: string, patch: ProductPatch): Promise<Pr
 export async function cancelPost(id: string): Promise<void> {
   const { count } = await prisma.post.updateMany({ where: { id, status: 'SCHEDULED' }, data: { status: 'CANCELED' } });
   if (count === 0) throw new Error('Só dá pra cancelar post agendado (SCHEDULED)');
+}
+
+/**
+ * Publica já um post agendado: pula a fila e o intervalo entre posts,
+ * mas respeita o teto diário (anti-spam).
+ */
+export async function publishNow(id: string): Promise<void> {
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const today = await prisma.post.count({
+    where: { OR: [{ status: 'POSTED', postedAt: { gte: dayAgo } }, { status: 'POSTING' }] },
+  });
+  if (config.postsPerDay > 0 && today >= config.postsPerDay) {
+    throw new Error(`Limite de ${config.postsPerDay} posts em 24h atingido (POSTS_PER_DAY). O post segue na fila.`);
+  }
+  // claim atômico: se o scheduler pegou no mesmo instante, só um dos dois envia
+  const { count } = await prisma.post.updateMany({ where: { id, status: 'SCHEDULED' }, data: { status: 'POSTING' } });
+  if (count === 0) throw new Error('Só dá pra postar agora um post agendado (SCHEDULED)');
+  await enqueuePublish(id);
 }
 
 /** Devolve um post FAILED/CANCELED para a fila. */
@@ -133,7 +109,7 @@ function trackedLink(postId: string, affiliateUrl: string): string {
 /** Gera o link de afiliado (com subID único), renderiza a mensagem e cria o post. */
 export async function schedulePostForProduct(
   productId: string,
-  opts?: { messageOverride?: string },
+  opts?: { messageOverride?: string; hook?: string | null },
 ): Promise<{ id: string; affiliateUrl: string; message: string }> {
   const product = await prisma.product.findUnique({ where: { id: productId } });
   if (!product) throw new Error('Produto não encontrado');
@@ -153,7 +129,7 @@ export async function schedulePostForProduct(
   const subId = `p${randomBytes(6).toString('hex')}`;
   const { affiliateUrl } = await provider.affiliateLink(product.url, subId);
 
-  let template = opts?.messageOverride?.trim() || defaultMessage(product);
+  let template = opts?.messageOverride?.trim() || defaultMessage(product, opts?.hook);
   if (!template.includes(LINK_PLACEHOLDER)) template += `\n\n🛒 ${LINK_PLACEHOLDER}`;
 
   // o link rastreado depende do id do post: cria e preenche na mesma transação,
@@ -170,4 +146,42 @@ export async function schedulePostForProduct(
   });
 
   return { id: post.id, affiliateUrl: post.affiliateUrl, message: post.message };
+}
+
+// ---------------------------------------------------------------- sugestões da curadoria
+
+/** Aprova uma sugestão: agenda o post (com a frase da IA, editável) e liga os dois. */
+export async function approveSuggestion(
+  id: string,
+  hook: string | null | undefined,
+  opts: { publishNow?: boolean } = {},
+): Promise<{ postId: string; published: boolean; publishError?: string }> {
+  const suggestion = await prisma.suggestion.findUnique({ where: { id } });
+  if (!suggestion) throw new Error('Sugestão não encontrada');
+  if (suggestion.status !== 'PENDING') throw new Error('Sugestão já foi decidida');
+
+  const finalHook = hook === undefined ? suggestion.hook : sanitizeHook(hook);
+  if (hook && !finalHook) throw new Error('Frase inválida: sem números, preços, %, links ou HTML (máx. 140)');
+
+  const post = await schedulePostForProduct(suggestion.productId, { hook: finalHook });
+  await prisma.suggestion.update({
+    where: { id },
+    data: { status: 'APPROVED', hook: finalHook, postId: post.id, decidedAt: new Date() },
+  });
+  if (!opts.publishNow) return { postId: post.id, published: false };
+  // aprovada e agendada; se o "agora" esbarrar no limite diário, o post fica na fila normal
+  try {
+    await publishNow(post.id);
+    return { postId: post.id, published: true };
+  } catch (err) {
+    return { postId: post.id, published: false, publishError: (err as Error).message };
+  }
+}
+
+export async function rejectSuggestion(id: string): Promise<void> {
+  const { count } = await prisma.suggestion.updateMany({
+    where: { id, status: 'PENDING' },
+    data: { status: 'REJECTED', decidedAt: new Date() },
+  });
+  if (count === 0) throw new Error('Sugestão não encontrada ou já decidida');
 }

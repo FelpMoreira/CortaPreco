@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@cupons/affiliates": "*",
+    "@cupons/curator": "*",
     "@cupons/db": "*",
     "@cupons/shared": "*",
     "@fastify/rate-limit": "^10.3.0",

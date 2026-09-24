@@ -37,7 +37,14 @@
 - [ ] Métricas: CTR, comissão por loja/categoria/horário (alimenta "quando postar")
 
 ## Fase 3 — Automação completa
-- [ ] IA no texto (mesmo template; LLM só escreve, números vêm do banco)
+- [x] Curadoria com aprovação: lote de links → regras/IA escolhem e escrevem a chamada → aba Sugestões (aprovar/rejeitar)
+- [x] Interface `Curator` trocável: `rules` (sem custo) e `claude` (liga com `LLM_PROVIDER=claude` + chave)
+- [x] Coletores Shopee (`productOfferV2`) e AliExpress (`hotproduct.query`) prontos — **validar com credencial real**
+- [x] Histórico de preço (anti-desconto-falso) e cooldown de repost
+- [ ] Escolher provedor de IA (comparar custo) e ligar
+- [ ] Aprovação pelo privado do bot no Telegram (botões)
+- [ ] Modo automático (sem aprovação) depois de confiar nas escolhas
+- [ ] Amazon automática só via Creators API (scraping viola as Condições de Uso)
 - [ ] WhatsApp via **Evolution API** (chip separado, aquecimento, pacing, opt-out)
 - [ ] Alertas por interesse (`/add palavra`) em DM do Telegram
 - [ ] Fila de curadoria (aprovar em lote o que a coleta trouxe)
