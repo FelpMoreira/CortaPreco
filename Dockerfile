@@ -3,6 +3,10 @@
 
 FROM node:22-bookworm-slim
 
+# O Prisma precisa do OpenSSL em runtime (a imagem slim não traz libssl)
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copia manifests antes do código p/ aproveitar cache do npm ci
