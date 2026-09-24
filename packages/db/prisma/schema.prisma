@@ -42,6 +42,7 @@ model Post {
   id                 String   @id @default(cuid())
   product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId          String
+  channel            Channel? @relation(fields: [channelId], references: [id])
   channelId          String?
   platform           String   @default("TELEGRAM")
   message            String
@@ -58,6 +59,7 @@ model Post {
   @@index([status])
   @@index([postedAt])
   @@index([createdAt])
+  @@index([channelId, status])
 }
 
 model Click {
@@ -71,13 +73,24 @@ model Click {
   @@index([createdAt])
 }
 
+// Destino de publicação (um canal do Telegram, um grupo/canal do WhatsApp...), com o
+// próprio ritmo: WhatsApp (API não oficial) precisa de limites bem mais rígidos que o Telegram.
 model Channel {
-  id        String   @id @default(cuid())
-  platform  String
-  telegramId String?
-  name      String
-  enabled   Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  platform     String   // TELEGRAM | WHATSAPP
+  name         String
+  target       String   // Telegram: @canal ou id numérico. WhatsApp: JID (...@g.us grupo, ...@newsletter canal)
+  enabled      Boolean  @default(true)
+  postsPerHour Int      @default(3)
+  postsPerDay  Int      @default(0)  // 0 = sem teto
+  quietHours   String   @default("") // ex.: "23-7" (horário de Brasília)
+  jitterPct    Int      @default(0)  // variação aleatória do intervalo, em %: evita padrão robótico
+  warmupDays   Int      @default(0)  // rampa de volume p/ número novo (0 = sem rampa)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  posts        Post[]
+
+  @@unique([platform, target])
 }
 
 model AppConfig {

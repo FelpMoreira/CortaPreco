@@ -7,7 +7,7 @@
 - [x] Amazon validada (3 posts reais publicados)
 - [ ] Trocar segredos fracos (`ADMIN_API_KEY`, `ADMIN_PASSWORD`, `JWT_SECRET`) — ver [[03 - Credenciais]]
 - [ ] Credenciais Shopee e validar no painel
-- [ ] Credenciais AliExpress e validar no painel
+- [x] Credenciais AliExpress e validar (link, leitura e descoberta funcionando em 24/09)
 
 ## Fase 1 — MVP manual
 - [x] Scaffold monorepo (api, worker, bot, web, packages)
@@ -45,7 +45,10 @@
 - [ ] Aprovação pelo privado do bot no Telegram (botões)
 - [ ] Modo automático (sem aprovação) depois de confiar nas escolhas
 - [ ] Amazon automática só via Creators API (scraping viola as Condições de Uso)
-- [ ] WhatsApp via **Evolution API** (chip separado, aquecimento, pacing, opt-out)
+- [x] Multicanal: um post aprovado sai em cada canal ativo, cada um com seu ritmo (D18)
+- [x] Envio WhatsApp pela Evolution API + formatação própria + aquecimento/jitter/silêncio
+- [ ] WhatsApp de verdade: subir Evolution API, conectar chip dedicado, preencher `.env`, validar envio
+- [ ] Opt-out fácil no WhatsApp e respostas a quem chama (reduz risco de ban)
 - [ ] Alertas por interesse (`/add palavra`) em DM do Telegram
 - [ ] Fila de curadoria (aprovar em lote o que a coleta trouxe)
 

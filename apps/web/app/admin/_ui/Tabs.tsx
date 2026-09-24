@@ -196,6 +196,7 @@ export function PostsTab({ notify }: { notify: Notify }) {
                 <div className="row">
                   <Badge value={p.status} />
                   <span className={`badge ${p.product.store}`}>{p.product.store}</span>
+                  {p.channel && <span className={`badge ${p.channel.platform}`}>{p.channel.name}</span>}
                   <span className="muted">
                     {p.postedAt ? `publicado ${fmtDate(p.postedAt)}` : `criado ${fmtDate(p.createdAt)}`}
                   </span>

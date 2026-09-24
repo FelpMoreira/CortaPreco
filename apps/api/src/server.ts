@@ -183,6 +183,7 @@ export function buildServer(): FastifyInstance {
         take: 100,
         include: {
           product: { select: { id: true, store: true, title: true, imageUrl: true } },
+          channel: { select: { platform: true, name: true } },
           _count: { select: { clicks: true } },
         },
       });
@@ -202,14 +203,19 @@ export function buildServer(): FastifyInstance {
             productId: { type: 'string', pattern: ID_PATTERN },
             // limite do caption de foto no Telegram é 1024; texto puro vai até 4096
             messageOverride: { type: 'string', maxLength: 3500 },
+            publishNow: { type: 'boolean' },
           },
         },
       },
     },
     async (req, reply) => {
-      const { productId, messageOverride } = req.body as { productId: string; messageOverride?: string };
+      const { productId, messageOverride, publishNow: now } = req.body as {
+        productId: string;
+        messageOverride?: string;
+        publishNow?: boolean;
+      };
       try {
-        const post = await schedulePostForProduct(productId, { messageOverride });
+        const post = await schedulePostForProduct(productId, { messageOverride, publishNow: now });
         return { ok: true, post };
       } catch (e) {
         return reply.code(400).send({ ok: false, error: (e as Error).message });

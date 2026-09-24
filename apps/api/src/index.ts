@@ -1,10 +1,12 @@
 import './env.js';
 
-import { prisma } from '@cupons/db';
+import { prisma, syncChannels } from '@cupons/db';
 import { assertSafeConfig, config } from './config.js';
 import { buildServer } from './server.js';
 
 assertSafeConfig();
+// canais (Telegram/WhatsApp) vêm do .env: o agendamento cria um post por canal ativo
+await syncChannels(process.env as Record<string, string | undefined>);
 const app = buildServer();
 
 const shutdown = async () => {

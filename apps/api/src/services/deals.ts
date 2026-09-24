@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { escapeHtml, LINK_PLACEHOLDER, renderMessageHtml } from '@cupons/shared';
+import { escapeHtml, LINK_PLACEHOLDER, renderMessageHtml, telegramHtmlToWhatsApp } from '@cupons/shared';
 import { ProviderRegistry } from '@cupons/affiliates';
-import { prisma, recordPrice, upsertProduct, type Product as PrismaProduct } from '@cupons/db';
+import { dailyCap, prisma, recordPrice, upsertProduct, type Product as PrismaProduct } from '@cupons/db';
 import { sanitizeHook } from '@cupons/curator';
 import { config } from '../config.js';
 import { enqueuePublish } from '../queue.js';
@@ -70,21 +70,46 @@ export async function cancelPost(id: string): Promise<void> {
 }
 
 /**
- * Publica já um post agendado: pula a fila e o intervalo entre posts,
- * mas respeita o teto diário (anti-spam).
+ * Publica já um post agendado: pula a fila, o intervalo e o horário de silêncio,
+ * mas respeita o teto diário do canal (e a rampa de aquecimento do WhatsApp).
  */
 export async function publishNow(id: string): Promise<void> {
-  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const today = await prisma.post.count({
-    where: { OR: [{ status: 'POSTED', postedAt: { gte: dayAgo } }, { status: 'POSTING' }] },
-  });
-  if (config.postsPerDay > 0 && today >= config.postsPerDay) {
-    throw new Error(`Limite de ${config.postsPerDay} posts em 24h atingido (POSTS_PER_DAY). O post segue na fila.`);
+  const post = await prisma.post.findUnique({ where: { id }, include: { channel: true } });
+  if (!post) throw new Error('Post não encontrado');
+  if (post.channel) {
+    const cap = dailyCap(post.channel);
+    if (Number.isFinite(cap)) {
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const sent = await prisma.post.count({
+        where: {
+          channelId: post.channel.id,
+          OR: [{ status: 'POSTED', postedAt: { gte: dayAgo } }, { status: 'POSTING' }],
+        },
+      });
+      if (sent >= cap) {
+        throw new Error(`${post.channel.name}: limite de ${cap} posts em 24h atingido. O post segue na fila.`);
+      }
+    }
   }
   // claim atômico: se o scheduler pegou no mesmo instante, só um dos dois envia
   const { count } = await prisma.post.updateMany({ where: { id, status: 'SCHEDULED' }, data: { status: 'POSTING' } });
   if (count === 0) throw new Error('Só dá pra postar agora um post agendado (SCHEDULED)');
   await enqueuePublish(id);
+}
+
+/** "Postar agora" em vários posts (um por canal); erros por canal não impedem os outros. */
+async function publishAllNow(ids: string[]): Promise<{ published: number; errors: string[] }> {
+  const errors: string[] = [];
+  let published = 0;
+  for (const id of ids) {
+    try {
+      await publishNow(id);
+      published++;
+    } catch (err) {
+      errors.push((err as Error).message);
+    }
+  }
+  return { published, errors };
 }
 
 /** Devolve um post FAILED/CANCELED para a fila. */
@@ -95,9 +120,14 @@ export async function requeuePost(id: string): Promise<void> {
     throw new Error('Só dá pra reenviar post FAILED ou CANCELED');
   }
   const pending = await prisma.post.findFirst({
-    where: { productId: post.productId, status: { in: ['SCHEDULED', 'POSTING'] }, NOT: { id } },
+    where: {
+      productId: post.productId,
+      channelId: post.channelId,
+      status: { in: ['SCHEDULED', 'POSTING'] },
+      NOT: { id },
+    },
   });
-  if (pending) throw new Error('Já existe outro post pendente deste produto');
+  if (pending) throw new Error('Já existe outro post pendente deste produto neste canal');
   await prisma.post.update({ where: { id }, data: { status: 'SCHEDULED', lastError: null } });
 }
 
@@ -106,51 +136,73 @@ function trackedLink(postId: string, affiliateUrl: string): string {
   return config.publicBaseUrl ? `${config.publicBaseUrl}/c/${postId}` : affiliateUrl;
 }
 
-/** Gera o link de afiliado (com subID único), renderiza a mensagem e cria o post. */
+export interface ScheduledPosts {
+  /** Primeiro post criado (compatibilidade com quem espera um só). */
+  id: string;
+  posts: { id: string; channel: string }[];
+  published?: number;
+  publishErrors?: string[];
+}
+
+/**
+ * Cria um post por canal ativo (Telegram, WhatsApp...). Cada um tem subID próprio
+ * (atribui a venda ao canal) e a mensagem no formato da plataforma.
+ */
 export async function schedulePostForProduct(
   productId: string,
-  opts?: { messageOverride?: string; hook?: string | null },
-): Promise<{ id: string; affiliateUrl: string; message: string }> {
+  opts?: { messageOverride?: string; hook?: string | null; publishNow?: boolean },
+): Promise<ScheduledPosts> {
   const product = await prisma.product.findUnique({ where: { id: productId } });
   if (!product) throw new Error('Produto não encontrado');
   if (!(Number(product.price) > 0)) {
     throw new Error('Produto sem preço (a loja não retornou o valor) — não dá pra publicar com R$ 0,00');
   }
 
-  // dedup: evita post duplicado do mesmo produto enquanto ainda pendente
-  const pending = await prisma.post.findFirst({
-    where: { productId, status: { in: ['SCHEDULED', 'POSTING'] } },
-  });
-  if (pending)
-    return { id: pending.id, affiliateUrl: pending.affiliateUrl, message: pending.message };
+  const channels = await prisma.channel.findMany({ where: { enabled: true }, orderBy: { createdAt: 'asc' } });
+  if (channels.length === 0) throw new Error('Nenhum canal ativo (configure TELEGRAM_CHANNEL e/ou WhatsApp no .env)');
 
-  const provider = registry.providerFor(product.url);
-  // subID único por post: chave para cruzar com o relatório de conversão da rede
-  const subId = `p${randomBytes(6).toString('hex')}`;
-  const { affiliateUrl } = await provider.affiliateLink(product.url, subId);
+  // dedup por canal: evita post duplicado do mesmo produto enquanto ainda pendente naquele canal
+  const pending = await prisma.post.findMany({
+    where: { productId, status: { in: ['SCHEDULED', 'POSTING'] }, channelId: { in: channels.map((c) => c.id) } },
+    select: { id: true, channelId: true },
+  });
+  const todo = channels.filter((c) => !pending.some((p) => p.channelId === c.id));
 
   let template = opts?.messageOverride?.trim() || defaultMessage(product, opts?.hook);
   if (!template.includes(LINK_PLACEHOLDER)) template += `\n\n🛒 ${LINK_PLACEHOLDER}`;
 
-  // o link rastreado depende do id do post: cria e preenche na mesma transação,
-  // assim o scheduler nunca vê o post com o marcador
-  const post = await prisma.$transaction(async (tx) => {
-    const created = await tx.post.create({
-      data: { productId, platform: 'TELEGRAM', message: template, affiliateUrl, subId, status: 'SCHEDULED' },
+  const provider = registry.providerFor(product.url);
+  const created: { id: string; channel: string }[] = [];
+  for (const channel of todo) {
+    // subID único por post: chave para cruzar com o relatório de conversão da rede
+    const subId = `p${randomBytes(6).toString('hex')}`;
+    const { affiliateUrl } = await provider.affiliateLink(product.url, subId);
+    // o link rastreado depende do id do post: cria e preenche na mesma transação,
+    // assim o scheduler nunca vê o post com o marcador
+    const post = await prisma.$transaction(async (tx) => {
+      const draft = await tx.post.create({
+        data: { productId, channelId: channel.id, platform: channel.platform, message: template, affiliateUrl, subId, status: 'SCHEDULED' },
+      });
+      const html = template.replaceAll(LINK_PLACEHOLDER, escapeHtml(trackedLink(draft.id, affiliateUrl)));
+      const message = channel.platform === 'WHATSAPP' ? telegramHtmlToWhatsApp(html) : html;
+      return tx.post.update({ where: { id: draft.id }, data: { message } });
     });
-    const link = escapeHtml(trackedLink(created.id, affiliateUrl));
-    return tx.post.update({
-      where: { id: created.id },
-      data: { message: template.replaceAll(LINK_PLACEHOLDER, link) },
-    });
-  });
+    created.push({ id: post.id, channel: channel.name });
+  }
 
-  return { id: post.id, affiliateUrl: post.affiliateUrl, message: post.message };
+  const all = [...created, ...pending.map((p) => ({ id: p.id, channel: channels.find((c) => c.id === p.channelId)!.name }))];
+  const result: ScheduledPosts = { id: all[0]!.id, posts: all };
+  if (opts?.publishNow && created.length) {
+    const { published, errors } = await publishAllNow(created.map((p) => p.id));
+    result.published = published;
+    result.publishErrors = errors;
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------- sugestões da curadoria
 
-/** Aprova uma sugestão: agenda o post (com a frase da IA, editável) e liga os dois. */
+/** Aprova uma sugestão: agenda os posts (com a frase da IA, editável) em todos os canais ativos. */
 export async function approveSuggestion(
   id: string,
   hook: string | null | undefined,
@@ -163,19 +215,17 @@ export async function approveSuggestion(
   const finalHook = hook === undefined ? suggestion.hook : sanitizeHook(hook);
   if (hook && !finalHook) throw new Error('Frase inválida: sem números, preços, %, links ou HTML (máx. 140)');
 
-  const post = await schedulePostForProduct(suggestion.productId, { hook: finalHook });
+  const scheduled = await schedulePostForProduct(suggestion.productId, { hook: finalHook, publishNow: opts.publishNow });
   await prisma.suggestion.update({
     where: { id },
-    data: { status: 'APPROVED', hook: finalHook, postId: post.id, decidedAt: new Date() },
+    data: { status: 'APPROVED', hook: finalHook, postId: scheduled.id, decidedAt: new Date() },
   });
-  if (!opts.publishNow) return { postId: post.id, published: false };
-  // aprovada e agendada; se o "agora" esbarrar no limite diário, o post fica na fila normal
-  try {
-    await publishNow(post.id);
-    return { postId: post.id, published: true };
-  } catch (err) {
-    return { postId: post.id, published: false, publishError: (err as Error).message };
-  }
+  // aprovada e agendada; se o "agora" esbarrar no limite de algum canal, aquele post fica na fila normal
+  return {
+    postId: scheduled.id,
+    published: (scheduled.published ?? 0) > 0,
+    publishError: scheduled.publishErrors?.length ? scheduled.publishErrors.join(' · ') : undefined,
+  };
 }
 
 export async function rejectSuggestion(id: string): Promise<void> {

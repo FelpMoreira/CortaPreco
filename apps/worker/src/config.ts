@@ -8,6 +8,11 @@ export const config = {
   postsPerHour: num(process.env.POSTS_PER_HOUR, 3),
   /** Janela sem posts automáticos, no horário de Brasília. Ex.: "23-7". Vazio = sem janela. */
   quietHours: process.env.QUIET_HOURS || '',
+  evolution: {
+    url: process.env.EVOLUTION_API_URL || '',
+    apiKey: process.env.EVOLUTION_API_KEY || '',
+    instance: process.env.EVOLUTION_INSTANCE || '',
+  },
   curation: {
     /** Quantas sugestões cada rodada de curadoria gera no máximo. */
     maxPicks: num(process.env.CURATION_MAX_PICKS, 5),

@@ -48,6 +48,27 @@ interface AliExpressCredentials {
   appKey: string;
   appSecret: string;
   trackingId: string;
+  /** Termos da descoberta automática (ALIEXPRESS_KEYWORDS). */
+  keywords?: string[];
+}
+
+// categorias com bom volume no Brasil; troque por ALIEXPRESS_KEYWORDS no .env
+const DEFAULT_KEYWORDS = [
+  'fone bluetooth',
+  'smartwatch',
+  'carregador turbo',
+  'organizador',
+  'ferramentas',
+  'utensilios cozinha',
+  'fita led',
+  'mouse sem fio',
+  'capa celular',
+  'acessorios carro',
+];
+
+/** Escolhe `n` termos, girando pela lista a cada rodada (determinístico por `seed`). */
+function pickKeywords(list: string[], n: number, seed: number): string[] {
+  return Array.from({ length: Math.min(n, list.length) }, (_, i) => list[(seed * n + i) % list.length]!);
 }
 
 /**
@@ -63,7 +84,12 @@ interface AliExpressCredentials {
 export class AliExpressProvider implements AffiliateProvider {
   readonly store = 'ALIEXPRESS' as Store;
 
-  constructor(private readonly creds: AliExpressCredentials) {}
+  private hotProductDenied = false;
+  private readonly keywords: string[];
+
+  constructor(private readonly creds: AliExpressCredentials) {
+    this.keywords = creds.keywords?.length ? creds.keywords : DEFAULT_KEYWORDS;
+  }
 
   identify(url: string): boolean {
     let host: string;
@@ -81,7 +107,27 @@ export class AliExpressProvider implements AffiliateProvider {
     );
   }
 
+  // a API bloqueia por ~1s quando as chamadas vêm rápido demais (ApiCallLimit)
+  private lastCallAt = 0;
+
   private async call(method: string, business: Record<string, unknown>): Promise<unknown> {
+    for (let attempt = 0; ; attempt++) {
+      const wait = this.lastCallAt + 1100 - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      this.lastCallAt = Date.now();
+      try {
+        return await this.callOnce(method, business);
+      } catch (err) {
+        if (attempt < 2 && err instanceof AffiliateError && err.message.includes('ApiCallLimit')) {
+          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  private async callOnce(method: string, business: Record<string, unknown>): Promise<unknown> {
     const now = new Date();
     const system: Record<string, string> = {
       method,
@@ -136,6 +182,13 @@ export class AliExpressProvider implements AffiliateProvider {
     return resp?.result ?? response?.result ?? json;
   }
 
+  /** Links curtos (a.aliexpress.com/_xxx, s.click...) redirecionam para a página do item. */
+  private async resolve(url: string): Promise<string> {
+    if (/\/item\/|\d{10,}/.test(new URL(url).pathname)) return url;
+    const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(15_000) });
+    return res.url || url;
+  }
+
   private extractItemId(url: string): string {
     const m = url.match(/\/item\/(?:-|item-)?(\d+)\.html/);
     if (m) return m[1]!;
@@ -148,6 +201,7 @@ export class AliExpressProvider implements AffiliateProvider {
     // NOTA: o subID por post ainda não vai para o AliExpress (a atribuição é pelo tracking_id);
     // guardamos no post para cruzar depois quando o formato de sub-id for validado.
     const sub = subId ?? 'cupons';
+    url = await this.resolve(url);
     const itemId = this.extractItemId(url);
 
     try {
@@ -156,16 +210,16 @@ export class AliExpressProvider implements AffiliateProvider {
         promotion_link_type: '0',
         source_values: url,
         tracking_id: this.creds.trackingId,
-      })) as { promotion_links?: { promotion_link?: Array<{ promotion_link?: string }> } };
+      })) as { promotion_links?: { promotion_link?: Array<{ promotion_link?: string; message?: string }> } };
 
-      const affiliateUrl = result.promotion_links?.promotion_link?.[0]?.promotion_link;
+      const entry = result.promotion_links?.promotion_link?.[0];
+      const affiliateUrl = entry?.promotion_link;
       if (!affiliateUrl) {
-        // Se a API não retornar link, monta via promo a partir do itemId
-        throw new AffiliateError(
-          `Nenhum link gerado para item ${itemId}. Validar payload na Fase 0.`,
-          'ALIEXPRESS',
-          'EMPTY_LINK',
-        );
+        // a API explica o motivo por item (ex.: "cannot be sold or promoted in the selected country")
+        const why = entry?.message?.includes('cannot be sold or promoted')
+          ? 'o AliExpress não permite promover este produto no Brasil'
+          : entry?.message ?? 'resposta sem link';
+        throw new AffiliateError(`AliExpress não gerou link para o item ${itemId}: ${why}`, 'ALIEXPRESS', 'EMPTY_LINK');
       }
       return { affiliateUrl, subId: sub };
     } catch (err) {
@@ -174,23 +228,51 @@ export class AliExpressProvider implements AffiliateProvider {
     }
   }
 
-  /** Produtos em alta pela API de afiliados (NOTA: validar o contrato com a credencial real). */
+  /**
+   * Descoberta de ofertas. Tenta "produtos em alta" (exige permissão avançada); sem ela,
+   * usa a busca por palavra-chave, girando por categorias populares a cada rodada.
+   */
   async discover(opts: DiscoverOptions): Promise<DiscoveredProduct[]> {
-    const result = (await this.call('aliexpress.affiliate.hotproduct.query', {
+    const common = {
       fields: PRODUCT_FIELDS,
       page_no: String(opts.page ?? 1),
-      page_size: String(opts.limit),
       sort: 'LAST_VOLUME_DESC',
       target_currency: 'BRL',
       target_language: 'PT',
       ship_to_country: 'BR',
       tracking_id: this.creds.trackingId,
-      ...(opts.keyword ? { keywords: opts.keyword } : {}),
-    })) as ProductsResult;
-    return (result.products?.product ?? []).flatMap((p) => mapProduct(p) ?? []);
+    };
+    if (!opts.keyword && !this.hotProductDenied) {
+      try {
+        const result = (await this.call('aliexpress.affiliate.hotproduct.query', {
+          ...common,
+          page_size: String(opts.limit),
+        })) as ProductsResult;
+        return (result.products?.product ?? []).flatMap((p) => mapProduct(p) ?? []);
+      } catch (err) {
+        if (!(err instanceof AffiliateError) || !err.message.includes('InsufficientPermission')) throw err;
+        this.hotProductDenied = true; // não insiste a cada rodada
+      }
+    }
+
+    const keywords = opts.keyword
+      ? [opts.keyword]
+      : pickKeywords(this.keywords, 2, Math.floor(Date.now() / (60 * 60 * 1000)));
+    const perKeyword = Math.max(5, Math.ceil(opts.limit / keywords.length));
+    const out: DiscoveredProduct[] = [];
+    for (const keyword of keywords) {
+      const result = (await this.call('aliexpress.affiliate.product.query', {
+        ...common,
+        keywords: keyword,
+        page_size: String(perKeyword),
+      })) as ProductsResult;
+      out.push(...(result.products?.product ?? []).flatMap((p) => mapProduct(p) ?? []));
+    }
+    return out;
   }
 
   async enrich(url: string): Promise<ProductData> {
+    url = await this.resolve(url);
     const itemId = this.extractItemId(url);
 
     try {

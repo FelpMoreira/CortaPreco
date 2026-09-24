@@ -37,7 +37,12 @@ services:
   # DATABASE_URL/REDIS_URL usam o nome do serviço (rede interna do Compose).
   db-init:
     image: cupons-app:dev
-    build: .
+    build:
+      context: .
+      # build usa a rede do host: em Fedora (systemd-resolved) o DNS do bridge não resolve
+      network: host
+    # DNS explícito: o 127.0.0.53 do host não é alcançável de dentro dos containers
+    dns: [1.1.1.1, 8.8.8.8]
     container_name: cupons-db-init
     restart: "no"
     environment:
@@ -49,7 +54,12 @@ services:
 
   api:
     image: cupons-app:dev
-    build: .
+    build:
+      context: .
+      # build usa a rede do host: em Fedora (systemd-resolved) o DNS do bridge não resolve
+      network: host
+    # DNS explícito: o 127.0.0.53 do host não é alcançável de dentro dos containers
+    dns: [1.1.1.1, 8.8.8.8]
     container_name: cupons-api
     restart: unless-stopped
     # todas as variáveis do .env (curadoria, ritmo, lojas...); o bloco environment
@@ -75,7 +85,12 @@ services:
 
   web:
     image: cupons-app:dev
-    build: .
+    build:
+      context: .
+      # build usa a rede do host: em Fedora (systemd-resolved) o DNS do bridge não resolve
+      network: host
+    # DNS explícito: o 127.0.0.53 do host não é alcançável de dentro dos containers
+    dns: [1.1.1.1, 8.8.8.8]
     container_name: cupons-web
     restart: unless-stopped
     # todas as variáveis do .env (curadoria, ritmo, lojas...); o bloco environment
@@ -97,7 +112,12 @@ services:
 
   worker:
     image: cupons-app:dev
-    build: .
+    build:
+      context: .
+      # build usa a rede do host: em Fedora (systemd-resolved) o DNS do bridge não resolve
+      network: host
+    # DNS explícito: o 127.0.0.53 do host não é alcançável de dentro dos containers
+    dns: [1.1.1.1, 8.8.8.8]
     container_name: cupons-worker
     restart: unless-stopped
     # todas as variáveis do .env (curadoria, ritmo, lojas...); o bloco environment
@@ -120,7 +140,12 @@ services:
 
   bot:
     image: cupons-app:dev
-    build: .
+    build:
+      context: .
+      # build usa a rede do host: em Fedora (systemd-resolved) o DNS do bridge não resolve
+      network: host
+    # DNS explícito: o 127.0.0.53 do host não é alcançável de dentro dos containers
+    dns: [1.1.1.1, 8.8.8.8]
     container_name: cupons-bot
     # sem token o bot sai com código 0 (desativado), sem loop de restart
     restart: "no"

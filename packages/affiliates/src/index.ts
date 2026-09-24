@@ -44,6 +44,7 @@ export class ProviderRegistry {
           appKey: env.ALIEXPRESS_APP_KEY,
           appSecret: env.ALIEXPRESS_APP_SECRET,
           trackingId: env.ALIEXPRESS_TRACKING_ID,
+          keywords: env.ALIEXPRESS_KEYWORDS?.split(',').map((k) => k.trim()).filter(Boolean),
         }),
       );
     }

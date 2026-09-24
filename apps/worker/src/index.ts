@@ -1,9 +1,13 @@
 import './env.js';
 
-import { prisma } from '@cupons/db';
+import { prisma, syncChannels } from '@cupons/db';
 import { publishQueue, tickScheduler } from './scheduler.js';
 import { createPublishWorker } from './worker.js';
 import { createCurateWorker, curateQueue, scheduleDiscovery } from './curation.js';
+
+// canais (Telegram/WhatsApp) e seus limites vêm do .env
+const channels = await syncChannels(process.env as Record<string, string | undefined>);
+console.log(`[worker] canais ativos: ${channels.map((c) => `${c.name} (${c.postsPerHour}/h, teto ${c.postsPerDay || 'livre'}/dia)`).join(', ') || 'nenhum'}`);
 
 const worker = createPublishWorker();
 console.log('[worker] publish worker iniciado');

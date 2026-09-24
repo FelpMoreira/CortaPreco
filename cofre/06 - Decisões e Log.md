@@ -21,6 +21,7 @@
 | D15 | IA nos posts | Fluxo (não agente): regras filtram → `Curator` escolhe e escreve chamada → **aprovação humana** → scheduler. Provedor trocável; padrão `rules` | Custo previsível, auditável; provedor de IA ainda em avaliação de preço |
 | D16 | Ritmo no Telegram | **Sem teto diário** (`POSTS_PER_DAY=0`), 3/h espaçados e **silêncio 23h–7h** (`QUIET_HOURS`) | Telegram só limita velocidade; o que incomoda o público é rajada e madrugada. Teto diário volta para WhatsApp |
 | D17 | Subida local | **`docker compose up -d` sobe o stack inteiro em modo dev**; `db-init` roda `db:push` automaticamente; bot desativado sem `TELEGRAM_BOT_TOKEN`; override monta `apps/` + `packages/` p/ hot reload | Réplica do README num comando só, com rebuild necessário apenas quando `package.json`/schema mudarem |
+| D18 | Multicanal | Tabela `Channel` com ritmo **por canal**; post aprovado vira um envio por canal ativo (subID próprio, formato da plataforma). WhatsApp via **Evolution API** com padrões conservadores: 2/h, teto 15/dia, silêncio 22h–8h, intervalo ±35%, aquecimento de 14 dias | API oficial não serve (grupo máx. 8 pessoas, sem canais); não oficial = risco de ban, então ritmo humano |
 
 ## Log
 
@@ -50,6 +51,15 @@
 
 - **2026-09-24** — fila parou: os 10 posts de 23/09 (14h40–17h40) lotaram o teto de 10 em janela móvel de 24h.
   Teto diário virou opcional e foi desligado; entrou a janela de silêncio 23h–7h (D16). Fila retomou às 13h22.
+
+- **2026-09-24** — merge do Docker Compose do colega (numerado D17 aqui). Compose passou a ler o `.env` inteiro.
+  Preparo do WhatsApp (D18): canais com ritmo próprio, conversor HTML→WhatsApp, envio pela Evolution API
+  testado contra servidor falso. Falta: subir a Evolution, conectar o chip e preencher `WHATSAPP_*`/`EVOLUTION_*`.
+
+- **2026-09-24** — AliExpress ligado: busca, leitura e link funcionando. `hotproduct.query` sem permissão → descoberta
+  por palavra-chave girando categorias (`ALIEXPRESS_KEYWORDS`). Corrigidos: espaçamento contra `ApiCallLimit`,
+  erro claro para item não promovível no Brasil, links curtos do app. Primeira busca: 30 avaliados → 5 sugestões.
+  Pontuação por regras recalibrada (antes saturava em 100). Títulos do AliExpress vêm com tradução ruim.
 
 ## Regras de ouro
 

@@ -118,19 +118,19 @@ export function OfferEditor({
       const dirty = (Object.keys(orig) as (keyof Form)[]).some((k) => orig[k] !== form[k]);
       if (dirty) await adminFetch(`products/${product.id}`, { method: 'PATCH', body: patch });
 
-      const { post } = await adminFetch<{ post: { id: string } }>('posts', {
+      const { post } = await adminFetch<{
+        post: { id: string; posts: { id: string; channel: string }[]; published?: number; publishErrors?: string[] };
+      }>('posts', {
         method: 'POST',
-        body: { productId: product.id, messageOverride: message },
+        body: { productId: product.id, messageOverride: message, publishNow: now },
       });
-      if (now) {
-        try {
-          await adminFetch(`posts/${post.id}/publish`, { method: 'POST' });
-          notify('success', 'Enviando para o canal agora.');
-        } catch (e) {
-          notify('error', `Agendado, mas não deu para postar agora: ${(e as Error).message}`);
-        }
+      const channels = post.posts.map((p) => p.channel).join(' + ');
+      if (now && post.publishErrors?.length) {
+        notify('error', `Agendado (${channels}), mas nem tudo saiu agora: ${post.publishErrors.join(' · ')}`);
+      } else if (now) {
+        notify('success', `Enviando agora para ${channels}.`);
       } else {
-        notify('success', `Post agendado. O scheduler publica respeitando o limite por hora. (${post.id.slice(-6)})`);
+        notify('success', `Agendado para ${channels}. O scheduler respeita o ritmo de cada canal.`);
       }
       setProduct(null);
       setForm(null);

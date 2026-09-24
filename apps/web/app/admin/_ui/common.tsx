@@ -30,6 +30,7 @@ export interface PostRow {
   createdAt: string;
   _count: { clicks: number };
   product: { id: string; store: string; title: string; imageUrl: string | null };
+  channel: { platform: string; name: string } | null;
 }
 
 export type Notify = (kind: 'success' | 'error', text: string) => void;
