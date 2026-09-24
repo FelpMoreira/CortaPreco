@@ -206,7 +206,7 @@ export async function schedulePostForProduct(
 export async function approveSuggestion(
   id: string,
   hook: string | null | undefined,
-  opts: { publishNow?: boolean } = {},
+  opts: { publishNow?: boolean; userId?: string } = {},
 ): Promise<{ postId: string; published: boolean; publishError?: string }> {
   const suggestion = await prisma.suggestion.findUnique({ where: { id } });
   if (!suggestion) throw new Error('Sugestão não encontrada');
@@ -218,7 +218,7 @@ export async function approveSuggestion(
   const scheduled = await schedulePostForProduct(suggestion.productId, { hook: finalHook, publishNow: opts.publishNow });
   await prisma.suggestion.update({
     where: { id },
-    data: { status: 'APPROVED', hook: finalHook, postId: scheduled.id, decidedAt: new Date() },
+    data: { status: 'APPROVED', hook: finalHook, postId: scheduled.id, decidedAt: new Date(), decidedById: opts.userId },
   });
   // aprovada e agendada; se o "agora" esbarrar no limite de algum canal, aquele post fica na fila normal
   return {
@@ -228,10 +228,10 @@ export async function approveSuggestion(
   };
 }
 
-export async function rejectSuggestion(id: string): Promise<void> {
+export async function rejectSuggestion(id: string, userId?: string): Promise<void> {
   const { count } = await prisma.suggestion.updateMany({
     where: { id, status: 'PENDING' },
-    data: { status: 'REJECTED', decidedAt: new Date() },
+    data: { status: 'REJECTED', decidedAt: new Date(), decidedById: userId },
   });
   if (count === 0) throw new Error('Sugestão não encontrada ou já decidida');
 }

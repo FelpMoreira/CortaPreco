@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SESSION_COOKIE, verifySession } from '@/lib/auth';
+import { callApi } from '@/lib/api';
+import { clientMeta, sessionToken } from '@/lib/auth';
 
 const deny = (error: string, status: number) => NextResponse.json({ ok: false, error }, { status });
+const PUBLIC_API = new Set(['/api/login', '/api/logout', '/api/setup', '/api/auth-status']);
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -20,16 +22,18 @@ export async function middleware(req: NextRequest) {
     if (!originHost || originHost !== host) return deny('Origem inválida', 403);
   }
 
-  if (pathname === '/admin/login' || pathname === '/api/login' || pathname === '/api/logout') {
-    return NextResponse.next();
-  }
+  if (pathname === '/admin/login' || PUBLIC_API.has(pathname)) return NextResponse.next();
 
-  const ok = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
-  if (ok) return NextResponse.next();
+  const token = sessionToken(req);
+  // /api/admin/*: a API valida sessão e perfil em toda chamada; aqui só barra quem nem tem cookie
+  if (isApi) return token ? NextResponse.next() : deny('Não autorizado', 401);
 
-  if (isApi) return deny('Não autorizado', 401);
+  // páginas do painel: confere a sessão no servidor antes de renderizar
+  const { status } = token ? await callApi('/api/auth/me', undefined, { token, ...clientMeta(req) }) : { status: 401 };
+  if (status === 200) return NextResponse.next();
   const url = req.nextUrl.clone();
   url.pathname = '/admin/login';
+  url.search = '';
   return NextResponse.redirect(url);
 }
 

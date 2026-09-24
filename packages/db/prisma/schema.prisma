@@ -121,9 +121,65 @@ model Suggestion {
   hook       String?   // frase de chamada escrita pela IA (sem números)
   status     String    @default("PENDING") // PENDING | APPROVED | REJECTED
   postId     String?
+  decidedBy  AdminUser? @relation(fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedById String?
   createdAt  DateTime  @default(now())
   decidedAt  DateTime?
 
   @@index([status, createdAt])
   @@index([productId])
+}
+
+
+// ---------------------------------------------------------------- acesso ao painel
+
+// Uma conta por pessoa. Perfis: DEV (tudo, inclusive usuários) | GERENTE (operação).
+model AdminUser {
+  id                 String         @id @default(cuid())
+  name               String
+  email              String         @unique // sempre minúsculo
+  passwordHash       String         // scrypt$N$r$p$sal$hash
+  role               String         @default("GERENTE")
+  active             Boolean        @default(true)
+  mustChangePassword Boolean        @default(false) // senha provisória: troca obrigatória
+  failedLogins       Int            @default(0)
+  lockedUntil        DateTime?      // bloqueio após muitas senhas erradas
+  lastLoginAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  sessions           AdminSession[]
+  audit              AuditLog[]
+  decisions          Suggestion[]
+}
+
+// Sessão no servidor: o navegador guarda o token; aqui fica só o SHA-256 dele.
+model AdminSession {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  user       AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime  @default(now())
+  expiresAt  DateTime  // limite absoluto
+  revokedAt  DateTime?
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Quem fez o quê no painel.
+model AuditLog {
+  id        String     @id @default(cuid())
+  user      AdminUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    String?
+  action    String     // ex.: login, login_failed, post.publish_now, user.create
+  target    String?    // id do objeto afetado
+  detail    String?    // resumo legível
+  ip        String?
+  createdAt DateTime   @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
 }

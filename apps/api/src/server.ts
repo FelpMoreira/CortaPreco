@@ -1,9 +1,11 @@
 import { timingSafeEqual } from 'node:crypto';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@cupons/db';
+import { afterQuietHours, channelPacing, prisma } from '@cupons/db';
 import { curatorFromEnv } from '@cupons/curator';
 import { config } from './config.js';
+import { registerAuth } from './auth/routes.js';
+import { audit } from './auth/sessions.js';
 import { curateQueue, type CurateJob } from './queue.js';
 import {
   approveSuggestion,
@@ -55,6 +57,9 @@ export function buildServer(): FastifyInstance {
       return reply.code(401).send({ ok: false, error: 'Não autorizado' });
     }
   });
+
+  // quem é o usuário (sessão) e o que o perfil dele pode fazer — ver auth/routes.ts
+  registerAuth(app);
 
   app.addHook('onSend', async (_req, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff');
@@ -160,6 +165,7 @@ export function buildServer(): FastifyInstance {
       const { id } = req.params as { id: string };
       try {
         const product = await updateProduct(id, req.body as ProductPatch);
+        await audit(req, 'product.update', id, JSON.stringify(req.body).slice(0, 300));
         return { ok: true, product, message: defaultMessage(product) };
       } catch (e) {
         return reply.code(400).send({ ok: false, error: (e as Error).message });
@@ -216,6 +222,7 @@ export function buildServer(): FastifyInstance {
       };
       try {
         const post = await schedulePostForProduct(productId, { messageOverride, publishNow: now });
+        await audit(req, now ? 'post.publish_now' : 'post.schedule', post.id, `produto ${productId}`);
         return { ok: true, post };
       } catch (e) {
         return reply.code(400).send({ ok: false, error: (e as Error).message });
@@ -226,6 +233,7 @@ export function buildServer(): FastifyInstance {
   app.post('/api/posts/:id/cancel', { schema: { params: idParams } }, async (req, reply) => {
     try {
       await cancelPost((req.params as { id: string }).id);
+      await audit(req, 'post.cancel', (req.params as { id: string }).id);
       return { ok: true };
     } catch (e) {
       return reply.code(400).send({ ok: false, error: (e as Error).message });
@@ -235,6 +243,7 @@ export function buildServer(): FastifyInstance {
   app.post('/api/posts/:id/publish', { schema: { params: idParams } }, async (req, reply) => {
     try {
       await publishNow((req.params as { id: string }).id);
+      await audit(req, 'post.publish_now', (req.params as { id: string }).id);
       return { ok: true };
     } catch (e) {
       return reply.code(400).send({ ok: false, error: (e as Error).message });
@@ -244,6 +253,7 @@ export function buildServer(): FastifyInstance {
   app.post('/api/posts/:id/requeue', { schema: { params: idParams } }, async (req, reply) => {
     try {
       await requeuePost((req.params as { id: string }).id);
+      await audit(req, 'post.requeue', (req.params as { id: string }).id);
       return { ok: true };
     } catch (e) {
       return reply.code(400).send({ ok: false, error: (e as Error).message });
@@ -270,6 +280,7 @@ export function buildServer(): FastifyInstance {
         orderBy: status === 'PENDING' ? [{ score: 'desc' }, { createdAt: 'desc' }] : { decidedAt: 'desc' },
         take: 100,
         include: {
+          decidedBy: { select: { name: true } },
           product: {
             select: {
               id: true, store: true, title: true, imageUrl: true, price: true, oldPrice: true,
@@ -322,6 +333,7 @@ export function buildServer(): FastifyInstance {
       if (unknown.length) {
         return reply.code(400).send({ ok: false, error: `Loja não configurada para: ${unknown.slice(0, 3).join(', ')}` });
       }
+      await audit(req, 'suggestions.batch', null, `${urls.length} link(s)`);
       const job = await curateQueue.add('urls', { kind: 'urls', urls } satisfies CurateJob, {
         removeOnComplete: 50,
         removeOnFail: 50,
@@ -330,10 +342,11 @@ export function buildServer(): FastifyInstance {
     },
   );
 
-  app.post('/api/suggestions/discover', async (_req, reply) => {
+  app.post('/api/suggestions/discover', async (req, reply) => {
     if (!registry.list().some((p) => p.discover)) {
       return reply.code(400).send({ ok: false, error: 'Nenhuma rede com API de descoberta configurada (Shopee/AliExpress)' });
     }
+    await audit(req, 'suggestions.discover');
     const job = await curateQueue.add('discover', { kind: 'discover' } satisfies CurateJob, {
       removeOnComplete: 50,
       removeOnFail: 50,
@@ -362,7 +375,13 @@ export function buildServer(): FastifyInstance {
       try {
         return {
           ok: true,
-          ...(await approveSuggestion(id, body.hook === '' ? null : body.hook, { publishNow: body.publishNow })),
+          ...(await approveSuggestion(id, body.hook === '' ? null : body.hook, {
+            publishNow: body.publishNow,
+            userId: req.admin!.id,
+          }).then(async (r) => {
+            await audit(req, body.publishNow ? 'suggestion.approve_publish' : 'suggestion.approve', id, `post ${r.postId}`);
+            return r;
+          })),
         };
       } catch (e) {
         return reply.code(400).send({ ok: false, error: (e as Error).message });
@@ -372,11 +391,81 @@ export function buildServer(): FastifyInstance {
 
   app.post('/api/suggestions/:id/reject', { schema: { params: idParams } }, async (req, reply) => {
     try {
-      await rejectSuggestion((req.params as { id: string }).id);
+      await rejectSuggestion((req.params as { id: string }).id, req.admin!.id);
+      await audit(req, 'suggestion.reject', (req.params as { id: string }).id);
       return { ok: true };
     } catch (e) {
       return reply.code(400).send({ ok: false, error: (e as Error).message });
     }
+  });
+
+  // ---------- visão geral (admin): números + ritmo de cada canal + previsão da fila ----------
+  app.get('/api/overview', async () => {
+    const now = Date.now();
+    const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
+    const channels = await prisma.channel.findMany({ where: { enabled: true }, orderBy: { createdAt: 'asc' } });
+
+    const channelInfo = await Promise.all(
+      channels.map(async (ch) => {
+        const pacing = await channelPacing(ch, now);
+        const queue = await prisma.post.findMany({
+          where: { channelId: ch.id, status: 'SCHEDULED' },
+          orderBy: { createdAt: 'asc' },
+          take: 8,
+          select: { id: true, product: { select: { title: true, store: true, imageUrl: true } } },
+        });
+        // previsão: o primeiro sai em nextAt; os seguintes, a cada intervalo base, pulando o silêncio
+        const step = (60 * 60 * 1000) / Math.max(ch.postsPerHour, 1);
+        let eta = pacing.nextAt ? Math.max(pacing.nextAt.getTime(), now) : now;
+        const upcoming = queue.map((q, i) => {
+          if (i > 0) eta += step;
+          if (ch.quietHours) eta = afterQuietHours(ch.quietHours, new Date(eta)).getTime();
+          return { ...q, eta: new Date(eta) };
+        });
+        return {
+          id: ch.id,
+          name: ch.name,
+          platform: ch.platform,
+          postsPerHour: ch.postsPerHour,
+          quietHours: ch.quietHours,
+          ...pacing,
+          upcoming,
+        };
+      }),
+    );
+
+    const [clicks24h, posted24h, failed, pendingSuggestions, recent] = await Promise.all([
+      prisma.click.count({ where: { createdAt: { gte: dayAgo } } }),
+      prisma.post.count({ where: { status: 'POSTED', postedAt: { gte: dayAgo } } }),
+      prisma.post.count({ where: { status: 'FAILED' } }),
+      prisma.suggestion.count({ where: { status: 'PENDING' } }),
+      prisma.post.findMany({
+        where: { status: 'POSTED' },
+        orderBy: { postedAt: 'desc' },
+        take: 6,
+        select: {
+          id: true,
+          postedAt: true,
+          channel: { select: { name: true, platform: true } },
+          product: { select: { title: true, store: true, imageUrl: true } },
+          _count: { select: { clicks: true } },
+        },
+      }),
+    ]);
+
+    return {
+      ok: true,
+      now: new Date(now),
+      stats: {
+        clicks24h,
+        posted24h,
+        scheduled: channelInfo.reduce((n, c) => n + c.scheduled, 0),
+        failed,
+        pendingSuggestions,
+      },
+      channels: channelInfo,
+      recent,
+    };
   });
 
   // ---------- métricas (admin) ----------

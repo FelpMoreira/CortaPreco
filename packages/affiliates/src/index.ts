@@ -6,7 +6,7 @@ import { AmazonProvider } from './amazon.js';
 
 export * from './types.js';
 export { ShopeeProvider } from './shopee.js';
-export { AliExpressProvider } from './aliexpress.js';
+export { AliExpressProvider, relevantPromos } from './aliexpress.js';
 export { AmazonProvider } from './amazon.js';
 
 export interface ProviderConfig {
@@ -45,6 +45,7 @@ export class ProviderRegistry {
           appSecret: env.ALIEXPRESS_APP_SECRET,
           trackingId: env.ALIEXPRESS_TRACKING_ID,
           keywords: env.ALIEXPRESS_KEYWORDS?.split(',').map((k) => k.trim()).filter(Boolean),
+          promos: env.ALIEXPRESS_PROMOS?.split(',').map((k) => k.trim()).filter(Boolean),
         }),
       );
     }

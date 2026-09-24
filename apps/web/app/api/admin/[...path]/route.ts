@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callApi } from '@/lib/api';
+import { clientMeta, sessionToken } from '@/lib/auth';
 
 // Proxy do painel → API. A sessão já foi checada no middleware; aqui só passa o que
 // está na lista, então a ADMIN_API_KEY nunca serve para rota não prevista.
@@ -12,6 +13,18 @@ const ALLOWED: [method: string, path: RegExp][] = [
   ['POST', /^posts$/],
   ['POST', new RegExp(`^posts/${ID}/(cancel|requeue|publish)$`)],
   ['GET', /^stats$/],
+  ['GET', /^overview$/],
+  // conta e sessões do próprio usuário
+  ['GET', /^auth\/me$/],
+  ['POST', /^auth\/password$/],
+  ['GET', /^auth\/sessions$/],
+  ['POST', new RegExp(`^auth/sessions/${ID}/revoke$`)],
+  // administração (a API exige perfil DEV)
+  ['GET', /^users$/],
+  ['POST', /^users$/],
+  ['PATCH', new RegExp(`^users/${ID}$`)],
+  ['POST', new RegExp(`^users/${ID}/(reset-password|revoke-sessions)$`)],
+  ['GET', /^audit$/],
   ['GET', /^suggestions$/],
   ['POST', /^suggestions\/(batch|discover)$/],
   ['POST', new RegExp(`^suggestions/${ID}/(approve|reject)$`)],
@@ -24,7 +37,11 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   }
   const query = req.nextUrl.searchParams.toString();
   const body = req.method === 'GET' ? undefined : await req.text();
-  const { status, data } = await callApi(`/api/${path}${query ? `?${query}` : ''}`, { method: req.method, body });
+  const { status, data } = await callApi(
+    `/api/${path}${query ? `?${query}` : ''}`,
+    { method: req.method, body },
+    { token: sessionToken(req), ...clientMeta(req) },
+  );
   return NextResponse.json(data, { status });
 }
 

@@ -22,6 +22,7 @@
 | D16 | Ritmo no Telegram | **Sem teto diário** (`POSTS_PER_DAY=0`), 3/h espaçados e **silêncio 23h–7h** (`QUIET_HOURS`) | Telegram só limita velocidade; o que incomoda o público é rajada e madrugada. Teto diário volta para WhatsApp |
 | D17 | Subida local | **`docker compose up -d` sobe o stack inteiro em modo dev**; `db-init` roda `db:push` automaticamente; bot desativado sem `TELEGRAM_BOT_TOKEN`; override monta `apps/` + `packages/` p/ hot reload | Réplica do README num comando só, com rebuild necessário apenas quando `package.json`/schema mudarem |
 | D18 | Multicanal | Tabela `Channel` com ritmo **por canal**; post aprovado vira um envio por canal ativo (subID próprio, formato da plataforma). WhatsApp via **Evolution API** com padrões conservadores: 2/h, teto 15/dia, silêncio 22h–8h, intervalo ±35%, aquecimento de 14 dias | API oficial não serve (grupo máx. 8 pessoas, sem canais); não oficial = risco de ban, então ritmo humano |
+| D19 | Acesso ao painel | Login **por usuário** com perfis **DEV** e **GERENTE**, sessões no servidor revogáveis, bloqueio por tentativas, auditoria (arquitetura do credluz adaptada) | Mais de uma pessoa opera o painel; saber quem aprovou/postou; senha única não escala |
 
 ## Log
 
@@ -60,6 +61,19 @@
   por palavra-chave girando categorias (`ALIEXPRESS_KEYWORDS`). Corrigidos: espaçamento contra `ApiCallLimit`,
   erro claro para item não promovível no Brasil, links curtos do app. Primeira busca: 30 avaliados → 5 sugestões.
   Pontuação por regras recalibrada (antes saturava em 100). Títulos do AliExpress vêm com tradução ruim.
+
+- **2026-09-24** — descoberta do AliExpress passa a usar as **promoções em destaque** (curadoria deles, equivalente aos
+  "Hot Deals" do painel): 1 promoção relevante (BR/eventos) + 1 palavra-chave por rodada. "Ship From BR" tem 48 mil itens
+  com envio nacional. Stack passou a rodar inteira no Docker.
+
+- **2026-09-24** — painel novo (inspirado no admin do credluz, não cópia): barra lateral recolhível, Visão geral com
+  cards, **"próximo post às HH:MM · motivo"** por canal e previsão da fila. Regras de ritmo movidas para
+  `@cupons/db/pacing`: scheduler e painel usam a mesma conta. Cards da vitrine com tamanho uniforme.
+  Dump do banco em `backups/` (fora do git) para o colega.
+
+- **2026-09-24** — login por usuário (D19): DEV/GERENTE, scrypt, sessões com hash no banco, bloqueio 5×/15 min,
+  troca obrigatória de senha provisória, auditoria, páginas Usuários/Auditoria/Minha conta. Testado ponta a ponta
+  com usuário descartável (removido). Primeiro DEV criado pelo script `admin:create`. `JWT_SECRET` deixou de ser usado.
 
 ## Regras de ouro
 

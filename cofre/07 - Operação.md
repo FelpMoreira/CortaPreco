@@ -17,6 +17,14 @@ npm run dev:web               # :3000 — site em /, painel em /admin
 - Mudou o `schema.prisma`? `npm run db:push` e **reinicie** api, worker e bot (o `tsx watch` não recarrega o client do Prisma).
 - Mudou o `next.config.ts`? O `next dev` reinicia sozinho.
 
+## Acesso ao painel
+
+- Cada pessoa tem o próprio login (perfil DEV ou GERENTE). DEV cria usuários em **Administração → Usuários**;
+  o sistema gera uma senha provisória (mostrada uma vez) e a pessoa troca no 1º acesso.
+- Esqueceu a senha? Um DEV gera nova provisória na tela de Usuários, ou pelo terminal:
+  `docker compose exec api npm run admin:create -- --email pessoa@x.com --reset`
+- Conta bloqueada (5 senhas erradas): espera 15 min ou um DEV gera nova provisória.
+
 ## Uso diário
 
 1. Painel → **Nova oferta** → cole a URL → **Buscar**.
@@ -50,5 +58,6 @@ Mínimo para lançar (detalhes em [[08 - Segurança#Checklist de lançamento]]):
 | "Nenhum provider configurado para a URL" | Loja sem credencial no `.env` | Ver [[03 - Credenciais]] |
 | Painel: "Muitas tentativas" | 5 senhas erradas em 15 min | Aguarde 15 min (ou reinicie o web em dev) |
 | Cliques sempre 0 | `PUBLIC_BASE_URL` vazio → posts usam link direto | Configure domínio/túnel |
+| API/painel no Docker: `Can't reach database server at postgres:5432` | Container criado num `up` que falhou (porta ocupada) ficou **sem rede** | Libere a porta e rode `docker compose up -d --force-recreate --no-deps api web` |
 | Build do Docker trava em `apt-get` / "Temporary failure resolving" | DNS do host é `systemd-resolved` (127.0.0.53), inalcançável dos containers (comum no Fedora) | Já tratado no compose: build com `network: host` e `dns: [1.1.1.1, 8.8.8.8]` nos serviços |
 | Página 500 "Can't resolve './types.js'" | Webpack sem `extensionAlias` | Já corrigido no `next.config.ts` — não remova |

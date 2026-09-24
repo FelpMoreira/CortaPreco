@@ -17,6 +17,7 @@ interface SuggestionRow {
   postId: string | null;
   createdAt: string;
   decidedAt: string | null;
+  decidedBy: { name: string } | null;
   product: {
     id: string;
     store: string;
@@ -218,6 +219,7 @@ function SuggestionCard({ s, notify, onDone }: { s: SuggestionRow; notify: Notif
             </div>
             <span className="muted">
               {s.curator} · {fmtDate(s.decidedAt ?? s.createdAt)}
+              {s.decidedBy ? ` · por ${s.decidedBy.name}` : ''}
             </span>
           </div>
           <a href={p.url} target="_blank" rel="noopener noreferrer" className="clamp" style={{ textDecoration: 'none', fontWeight: 600 }}>

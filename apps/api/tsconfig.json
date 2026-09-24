@@ -7,5 +7,5 @@
       "@cupons/db": ["../../packages/db/src/index.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "scripts"]
 }

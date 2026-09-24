@@ -37,7 +37,7 @@ function mapProduct(p: Record<string, unknown>): DiscoveredProduct | null {
     category: p['first_level_category_name'] ? String(p['first_level_category_name']) : null,
     rating: Number.isFinite(evaluate) && evaluate > 0 ? Math.round((evaluate / 20) * 100) / 100 : null,
     sales: Number(p['lastest_volume']) || null,
-    url: String(p['product_detail_url'] ?? `https://pt.aliexpress.com/item/${id}.html`),
+    url: String(p['product_detail_url'] ?? `https://pt.aliexpress.com/item/${id}.html`).split('?')[0]!,
     commissionRate: Number.isFinite(commission) && commission > 0 ? commission / 100 : null,
   };
 }
@@ -50,6 +50,8 @@ interface AliExpressCredentials {
   trackingId: string;
   /** Termos da descoberta automática (ALIEXPRESS_KEYWORDS). */
   keywords?: string[];
+  /** Promoções a usar (ALIEXPRESS_PROMOS, trechos do nome); vazio = escolha automática BR + eventos. */
+  promos?: string[];
 }
 
 // categorias com bom volume no Brasil; troque por ALIEXPRESS_KEYWORDS no .env
@@ -65,6 +67,22 @@ const DEFAULT_KEYWORDS = [
   'capa celular',
   'acessorios carro',
 ];
+
+/**
+ * Promoções em destaque do AliExpress (curadoria deles) que servem para o Brasil:
+ * as marcadas BR (ex.: "Ship From BR") e eventos do site sem país (Brand Day, Big Save...).
+ * Listas de dropshipping de outros países (AEB_MX_..., AEB_SA_...) ficam de fora.
+ */
+const OTHER_COUNTRY = /(^|[_\s-])(PE|EG|MX|CL|CO|ES|FR|DE|IT|PL|NL|KR|JP|SA|AE|IL|TR|UA|US|UK|AU|NZ|CA|PT|RU|KZ|MA|DZ|TN|NG|ZA|PH|MY|TH|VN|ID|SG|IN|PK|AR|UY|EE|FI|LV|LT|Iraq|Mexico|Poland|SHIPTOUS)([_\s&-]|$)/i;
+const BRAZIL = /(^|[_\s-])BR([_\s-]|$)|Brasil|Brazil/i;
+const EVENT = /Brand Day|Big Save|Bestsellers?|Top Brands|Super ?Deals?|Choice Day|Black Friday|11\.11|Anniversary|Mega Sale/i;
+
+export function relevantPromos(names: string[], override?: string[]): string[] {
+  if (override?.length) return names.filter((n) => override.some((o) => n.toLowerCase().includes(o.toLowerCase())));
+  const br = names.filter((n) => BRAZIL.test(n));
+  const events = names.filter((n) => !n.startsWith('AEB_') && EVENT.test(n) && !OTHER_COUNTRY.test(n));
+  return [...br, ...events];
+}
 
 /** Escolhe `n` termos, girando pela lista a cada rodada (determinístico por `seed`). */
 function pickKeywords(list: string[], n: number, seed: number): string[] {
@@ -85,6 +103,7 @@ export class AliExpressProvider implements AffiliateProvider {
   readonly store = 'ALIEXPRESS' as Store;
 
   private hotProductDenied = false;
+  private promoCache: { at: number; names: string[] } | null = null;
   private readonly keywords: string[];
 
   constructor(private readonly creds: AliExpressCredentials) {
@@ -228,6 +247,34 @@ export class AliExpressProvider implements AffiliateProvider {
     }
   }
 
+  /** Promoções relevantes para o Brasil, com cache de 6h (a lista muda com o calendário do site). */
+  async promotions(): Promise<string[]> {
+    if (this.promoCache && Date.now() - this.promoCache.at < 6 * 60 * 60 * 1000) return this.promoCache.names;
+    const result = (await this.call('aliexpress.affiliate.featuredpromo.get', {
+      fields: 'promo_name,product_num',
+    })) as { promos?: { promo?: Array<{ promo_name?: string; product_num?: number }> } };
+    const all = (result.promos?.promo ?? []).filter((p) => (p.product_num ?? 0) > 0).map((p) => String(p.promo_name).trim());
+    const names = relevantPromos(all, this.creds.promos);
+    this.promoCache = { at: Date.now(), names };
+    return names;
+  }
+
+  /** Mais vendidos de uma promoção em destaque, para o Brasil. */
+  async promoProducts(promotion: string, limit: number): Promise<DiscoveredProduct[]> {
+    const result = (await this.call('aliexpress.affiliate.featuredpromo.products.get', {
+      promotion_name: promotion,
+      fields: PRODUCT_FIELDS,
+      page_no: '1',
+      page_size: String(limit),
+      sort: 'volumeDesc',
+      target_currency: 'BRL',
+      target_language: 'PT',
+      country: 'BR',
+      tracking_id: this.creds.trackingId,
+    })) as ProductsResult;
+    return (result.products?.product ?? []).flatMap((p) => mapProduct(p) ?? []);
+  }
+
   /**
    * Descoberta de ofertas. Tenta "produtos em alta" (exige permissão avançada); sem ela,
    * usa a busca por palavra-chave, girando por categorias populares a cada rodada.
@@ -255,11 +302,22 @@ export class AliExpressProvider implements AffiliateProvider {
       }
     }
 
-    const keywords = opts.keyword
-      ? [opts.keyword]
-      : pickKeywords(this.keywords, 2, Math.floor(Date.now() / (60 * 60 * 1000)));
-    const perKeyword = Math.max(5, Math.ceil(opts.limit / keywords.length));
+    const round = Math.floor(Date.now() / (60 * 60 * 1000));
     const out: DiscoveredProduct[] = [];
+
+    // curadoria do próprio AliExpress: 1 promoção relevante por rodada, girando
+    if (!opts.keyword) {
+      try {
+        const promos = await this.promotions();
+        const [promo] = pickKeywords(promos, 1, round);
+        if (promo) out.push(...(await this.promoProducts(promo, Math.ceil(opts.limit / 2))));
+      } catch (err) {
+        console.warn(`[aliexpress] promoções indisponíveis: ${(err as Error).message}`);
+      }
+    }
+
+    const keywords = opts.keyword ? [opts.keyword] : pickKeywords(this.keywords, 1, round);
+    const perKeyword = Math.max(5, Math.ceil((opts.limit - out.length) / keywords.length));
     for (const keyword of keywords) {
       const result = (await this.call('aliexpress.affiliate.product.query', {
         ...common,

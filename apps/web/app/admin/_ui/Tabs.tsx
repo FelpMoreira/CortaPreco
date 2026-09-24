@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { LuSend } from 'react-icons/lu';
+import { LuListOrdered, LuMousePointerClick, LuSend, LuTriangleAlert } from 'react-icons/lu';
+import { StatCard } from './ui';
 import { adminFetch, Badge, brl, fmtDate, STATUS_LABEL, Thumb, type Notify, type PostRow, type ProductRow } from './common';
 
 /** Carrega dados e recarrega sob demanda (e opcionalmente em intervalo). */
@@ -270,19 +271,20 @@ export function MetricsTab({ notify }: { notify: Notify }) {
 
   return (
     <div className="grid" style={{ gap: 16 }}>
-      <div className="grid cols-4">
-        {tiles.map(([label, value, hint]) => (
-          <div key={label} className="card">
-            <p className="muted" style={{ margin: 0 }}>{label}</p>
-            <p className="stat" style={label === 'Falhas' && value > 0 ? { color: 'var(--red)' } : undefined}>
-              {value}
-            </p>
-            <p className="muted" style={{ margin: 0 }}>{hint}</p>
-          </div>
+      <div className="stats">
+        {tiles.map(([label, value, hint], i) => (
+          <StatCard
+            key={label}
+            label={label}
+            value={value}
+            hint={hint}
+            icon={[<LuMousePointerClick key="c" size={16} />, <LuSend key="p" size={16} />, <LuListOrdered key="f" size={16} />, <LuTriangleAlert key="x" size={16} />][i]}
+            tone={(['amber', 'green', 'blue', value > 0 ? 'red' : 'green'] as const)[i]}
+          />
         ))}
       </div>
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Posts com mais cliques</h3>
+      <div className="panel">
+        <h3 className="panel-title">Posts com mais cliques</h3>
         <p className="muted">
           {s.postedWithClicks} de {s.posted} posts publicados tiveram ao menos um clique.
         </p>

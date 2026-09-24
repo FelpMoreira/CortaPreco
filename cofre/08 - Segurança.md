@@ -9,13 +9,25 @@
 | Credenciais de afiliado | Links com o tracking de outra pessoa, perda de comissão |
 | Redirector `/c/` | Cliques falsos distorcem métricas; abuso de carga |
 
+## Acesso ao painel (por usuário)
+
+- Uma conta por pessoa (`AdminUser`). Perfis: **DEV** (tudo + usuários + auditoria) e **GERENTE** (operação).
+  A checagem de perfil é na **API** (guard em toda rota `/api/*`), não só no menu.
+- Senha: `scrypt` (N=2^15), mínimo 12 caracteres, bloqueia senhas óbvias/que contêm o e-mail.
+- Bloqueio: 5 senhas erradas → conta travada 15 min (no banco); limite por IP no Next e na API.
+  Mensagem genérica e tempo de resposta igual para e-mail inexistente.
+- Sessão no servidor (`AdminSession`): token aleatório de 256 bits no cookie (`HttpOnly`, `SameSite=Strict`,
+  `Secure` + `__Host-` em produção); no banco só o SHA-256. Cai após 2h sem uso ou 12h no total.
+  Logout revoga; trocar senha derruba as outras sessões; desativar/mudar perfil derruba todas.
+- Senha provisória (criada por DEV ou pelo script) obriga troca no 1º acesso — nada abre antes.
+- Sempre sobra pelo menos um DEV ativo. Auditoria (`AuditLog`) de logins, falhas, bloqueios, usuários e ações.
+- Criar/redefinir acesso pelo terminal: `npm run admin:create -w @cupons/api -- --email ... --name ... [--role GERENTE] [--reset]`.
+
 ## Controles implementados
 
 **Painel (web)**
-- Sessão HMAC-SHA256 em cookie `httpOnly`, `SameSite=Strict`, `Secure` + prefixo `__Host-` em produção, validade 12h.
 - Middleware exige sessão em `/admin/*` e `/api/*` (exceto login/logout). Rotas novas nascem protegidas.
 - **CSRF:** escrita em `/api/*` só com `Origin` igual ao host.
-- Login: comparação em tempo constante; 5 erros por IP / 30 no total a cada 15 min → 429.
 - Proxy `/api/admin/*` só repassa uma **allowlist** de método + rota para a API.
 - `lib/api.ts` é `server-only`: a chave nunca vai pro bundle do navegador.
 - Cabeçalhos: CSP (`frame-ancestors 'none'`, `object-src 'none'`), `X-Frame-Options: DENY`, `nosniff`,
@@ -42,7 +54,7 @@
 
 ## Checklist de lançamento
 
-- [ ] `ADMIN_API_KEY` e `JWT_SECRET` com `openssl rand -hex 32`; `ADMIN_PASSWORD` com 16+ caracteres
+- [ ] `ADMIN_API_KEY` com `openssl rand -hex 32`; cada pessoa com o próprio usuário (sem conta compartilhada)
 - [ ] `NODE_ENV=production` em todos os processos
 - [ ] HTTPS no site e no domínio do `/c/`; `PUBLIC_BASE_URL` com `https://`
 - [ ] Proxy expõe da API **só** `/c/*` e `/api/public/*`

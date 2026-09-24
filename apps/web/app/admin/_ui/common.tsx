@@ -51,10 +51,22 @@ export async function adminFetch<T>(path: string, init?: { method?: string; body
     window.location.assign('/admin/login');
     throw new Error('Sessão expirada');
   }
-  const json = (await res.json().catch(() => null)) as ({ ok?: boolean; error?: string } & T) | null;
+  const json = (await res.json().catch(() => null)) as ({ ok?: boolean; error?: string; code?: string } & T) | null;
+  // senha provisória: o painel troca para a tela de troca obrigatória
+  if (res.status === 403 && json?.code === 'MUST_CHANGE_PASSWORD') window.dispatchEvent(new Event('must-change-password'));
   if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Erro ${res.status}`);
   return json;
 }
+
+export type Role = 'DEV' | 'GERENTE';
+export interface Me {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  mustChangePassword: boolean;
+}
+export const ROLE_LABEL: Record<Role, string> = { DEV: 'Dev', GERENTE: 'Gerente' };
 
 export const brl = (v: string | number | null | undefined): string => {
   if (v == null || v === '') return '—';

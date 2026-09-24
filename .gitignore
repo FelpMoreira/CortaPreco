@@ -14,3 +14,6 @@ prisma/*.db
 cofre/03 - Credenciais.md
 cofre/.obsidian/workspace*.json
 cofre/.obsidian/
+
+# dumps do banco (dados reais: não versionar)
+backups/
