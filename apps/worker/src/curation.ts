@@ -198,7 +198,10 @@ export async function runSource(sourceId: string): Promise<Record<string, unknow
     : summary.aviso
       ? String(summary.aviso)
       : `${summary.sugestoes} sugestão(ões) · ${summary.avaliados} avaliado(s) · ${summary.foraDoNicho} fora do nicho` +
-        (summary.links !== undefined ? ` · ${summary.links} link(s) em ${summary.mensagens} msg · ${summary.jaVistos} já vistos` : '');
+        (summary.links !== undefined
+          ? ` · ${summary.links} link(s) em ${summary.mensagens} msg · ${summary.jaVistos} já vistos` +
+            (summary.paraTentarDeNovo ? ` · ${summary.paraTentarDeNovo} p/ tentar de novo` : '')
+          : '');
   await prisma.channelSource.update({ where: { id: sourceId }, data: { lastRunAt: started, lastResult: text.slice(0, 300) } });
   return summary;
 }
@@ -206,6 +209,8 @@ export async function runSource(sourceId: string): Promise<Record<string, unknow
 // Amazon vinda de grupos: leitura de página com teto baixo até a Creators API (Condições de Uso)
 const amazonReads: number[] = [];
 const AMAZON_PER_HOUR = 10;
+/** Tentativas de ler um link que falhou antes de desistir dele. */
+const MAX_LINK_ATTEMPTS = 3;
 
 /**
  * Fonte TELEGRAM: lê as mensagens novas do grupo de origem, pega só os links de produto
@@ -218,33 +223,62 @@ async function runTelegramSource(source: NonNullable<Awaited<ReturnType<typeof l
   let seen = 0;
   let offNiche = 0;
   let skipped = 0;
-  for (const { canonical } of read.productUrls) {
+  let retry = 0;
+  // links novos + os que falharam por motivo passageiro em rodadas anteriores
+  const pending = await prisma.seenLink.findMany({
+    where: { sourceId: source.id, status: 'RETRY', url: { not: null } },
+    orderBy: { updatedAt: 'asc' },
+    take: 10,
+  });
+  const urls = [...new Set([...read.productUrls.map((p) => p.canonical), ...pending.map((p) => p.url!)])];
+  for (const canonical of urls) {
     const hash = linkHash(source.id, canonical);
-    if (await prisma.seenLink.findUnique({ where: { urlHash: hash } })) {
+    const prev = await prisma.seenLink.findUnique({ where: { urlHash: hash } });
+    if (prev?.status === 'DONE') {
       seen++;
       continue;
     }
-    await prisma.seenLink.create({ data: { urlHash: hash, sourceId: source.id } });
+    // Marca o link DEPOIS de saber o resultado: falha da loja não pode descartá-lo para sempre.
+    const mark = (status: 'DONE' | 'RETRY', failed = false) => {
+      const attempts = (prev?.attempts ?? 0) + (failed ? 1 : 0);
+      const final = status === 'RETRY' && attempts >= MAX_LINK_ATTEMPTS ? 'DONE' : status;
+      return prisma.seenLink.upsert({
+        where: { urlHash: hash },
+        create: { urlHash: hash, sourceId: source.id, url: canonical, status: final, attempts },
+        update: { status: final, attempts },
+      });
+    };
+    let provider: ReturnType<typeof registry.providerFor>;
     try {
-      const provider = registry.providerFor(canonical);
-      if (provider.store === 'AMAZON') {
-        const hourAgo = Date.now() - 3_600_000;
-        while (amazonReads.length && amazonReads[0]! < hourAgo) amazonReads.shift();
-        if (amazonReads.length >= AMAZON_PER_HOUR) {
-          skipped++;
-          continue;
-        }
-        amazonReads.push(Date.now());
+      provider = registry.providerFor(canonical);
+    } catch {
+      skipped++; // loja sem integração: não adianta tentar de novo
+      await mark('DONE');
+      continue;
+    }
+    if (provider.store === 'AMAZON') {
+      const hourAgo = Date.now() - 3_600_000;
+      while (amazonReads.length && amazonReads[0]! < hourAgo) amazonReads.shift();
+      if (amazonReads.length >= AMAZON_PER_HOUR) {
+        retry++; // teto de leitura da Amazon: fica para a próxima rodada
+        await mark('RETRY');
+        continue;
       }
+      amazonReads.push(Date.now());
+    }
+    try {
       const data = await provider.enrich(canonical);
       if (!matchesNiche(data.title, rule)) {
         offNiche++;
+        await mark('DONE');
         continue;
       }
       ids.push((await upsertProduct({ ...data, store: provider.store, url: canonical })).id);
+      await mark('DONE');
       await sleep(1500); // volume humano nas páginas das lojas
     } catch {
-      skipped++; // loja sem integração ou produto indisponível
+      retry++; // produto indisponível ou loja fora do ar: tenta de novo nas próximas rodadas
+      await mark('RETRY', true);
     }
   }
   if (read.lastMessageId) await prisma.channelSource.update({ where: { id: source.id }, data: { lastMessageId: BigInt(read.lastMessageId) } });
@@ -262,6 +296,7 @@ async function runTelegramSource(source: NonNullable<Awaited<ReturnType<typeof l
     links: read.productUrls.length,
     jaVistos: seen,
     ignorados: skipped,
+    paraTentarDeNovo: retry,
     foraDoNicho: offNiche,
     sugestoes: cur.created,
     avaliados: cur.considered,

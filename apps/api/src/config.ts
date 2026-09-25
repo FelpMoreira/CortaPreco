@@ -12,6 +12,8 @@ export const config = {
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
   /** Teto diário de posts: vale também para o "postar agora". */
   postsPerDay: Number(process.env.POSTS_PER_DAY || 10),
+  /** Não repete o mesmo produto num canal postado nos últimos N dias (mesmo valor da curadoria). */
+  repostCooldownDays: Number(process.env.CURATION_COOLDOWN_DAYS || 7),
 };
 
 /** Falha cedo se a configuração não é segura o bastante para subir. */

@@ -971,3 +971,162 @@ img.pthumb {
     padding: 16px 14px 56px;
   }
 }
+
+/* ============================================================
+   Painel admin — paleta neutra. O verde da marca fica só onde tem
+   função (ação principal, item ativo, foco, sucesso); o resto é cinza.
+   ============================================================ */
+
+.admin {
+  --bg: #0c0d0f;
+  --bg-card: #141518;
+  --bg-input: #0f1012;
+  --bg-hover: #1b1d21;
+  --border: #25272c;
+  --text: #ebecef;
+  --muted: #8d919a;
+  --accent: #22a06e;
+  --accent-ink: #ffffff;
+  --green: #34b27b;
+  --amber: #e5a33a;
+  --red: #ef5350;
+  --side-bg: #101114;
+  --side-bg-2: #101114;
+  --side-text: #c4c7ce;
+  --side-muted: #6f737c;
+  --side-active: rgba(255, 255, 255, 0.07);
+  --side-border: rgba(255, 255, 255, 0.06);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  background: var(--bg);
+  color: var(--text);
+}
+:root[data-theme='light'] .admin {
+  --bg: #f6f7f9;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: #f1f2f5;
+  --border: #e3e5e9;
+  --text: #16181d;
+  --muted: #666b75;
+  --accent: #15885a;
+  --accent-ink: #ffffff;
+  --green: #15803d;
+  --amber: #b45309;
+  --red: #dc2626;
+  --side-bg: #121316;
+  --side-bg-2: #121316;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+
+/* títulos mais sóbrios */
+.admin .page-header h1 {
+  font-weight: 700;
+  font-size: 21px;
+}
+.admin .page-icon,
+.admin .panel-title svg {
+  color: var(--muted);
+}
+.admin .page-icon {
+  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+}
+.admin .panel {
+  border-radius: 12px;
+}
+.admin .panel.accent {
+  border-top: 1px solid var(--border);
+}
+.admin .panel-title {
+  font-weight: 650;
+}
+.admin .btn {
+  font-weight: 600;
+  border-radius: 8px;
+}
+.admin .avatar {
+  background: var(--bg-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+/* cards de número: neutros, a cor fica só no ícone */
+.admin .stat-card {
+  border-left: 1px solid var(--border);
+  border-radius: 12px;
+}
+.admin .stat-card:hover {
+  box-shadow: 0 6px 20px -14px rgba(0, 0, 0, 0.4);
+}
+.admin .stat-value {
+  font-weight: 700;
+  font-size: 28px;
+}
+.admin .stat-icon {
+  background: var(--bg-hover);
+  color: var(--tone, var(--muted));
+}
+.admin .tone-green { --tone: var(--green); }
+
+/* barra lateral: grafite, item ativo com o traço verde */
+.admin .nav-item {
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+.admin .nav-item[aria-current='page'] {
+  background: var(--side-active);
+  color: #fff;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.admin .nav-count {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-weight: 700;
+}
+.admin .side-section {
+  font-weight: 700;
+}
+
+/* avisos */
+.admin .banner.go {
+  border-color: color-mix(in srgb, var(--green) 35%, var(--border));
+  background: color-mix(in srgb, var(--green) 6%, var(--bg-card));
+}
+.admin .banner.wait {
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--border));
+  background: color-mix(in srgb, var(--amber) 6%, var(--bg-card));
+}
+
+/* etiquetas: tom suave em vez de bloco saturado */
+.admin .badge {
+  --b: var(--muted);
+  background: color-mix(in srgb, var(--b) 14%, transparent);
+  color: var(--b);
+  border: 1px solid color-mix(in srgb, var(--b) 22%, transparent);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.admin .badge.NEW { --b: #5b8def; }
+.admin .badge.READY,
+.admin .badge.POSTED { --b: var(--green); }
+.admin .badge.FILTERED { --b: #9b7bea; }
+.admin .badge.EXPIRED,
+.admin .badge.CANCELED { --b: var(--muted); }
+.admin .badge.SCHEDULED { --b: var(--amber); }
+.admin .badge.POSTING { --b: #2aa3c2; }
+.admin .badge.FAILED { --b: var(--red); }
+.admin .badge.SHOPEE { --b: #ee4d2d; }
+.admin .badge.ALIEXPRESS { --b: #e8491d; }
+.admin .badge.AMAZON { --b: #e08a00; }
+.admin .badge.TELEGRAM { --b: #229ed9; }
+.admin .badge.WHATSAPP { --b: #1fae55; }
+
+.admin .chip[aria-pressed='true'],
+.admin .chip[aria-current='page'] {
+  background: var(--text);
+  color: var(--bg-card);
+}
+.admin .tab[aria-selected='true'] {
+  border-bottom-color: var(--text);
+}

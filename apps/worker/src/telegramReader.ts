@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { TelegramClient } from 'telegram';
+import { returnBigInt } from 'telegram/Helpers.js';
 import { StringSession } from 'telegram/sessions/index.js';
-import { canonicalProductUrl, extractLinks, SHORTENERS, type MessageLike } from './telegramLinks.js';
+import { canonicalProductUrl, extractLinks, isAllowedHop, SHORTENERS, type MessageLike } from './telegramLinks.js';
 
 /**
  * Leitura de outros grupos/canais do Telegram com uma CONTA DE USUÁRIO dedicada (bot não lê
@@ -9,6 +10,8 @@ import { canonicalProductUrl, extractLinks, SHORTENERS, type MessageLike } from 
  * (gerada por `npm run telegram:login`).
  */
 let client: TelegramClient | null = null;
+/** Cache de entidades do cliente atual já foi preenchido com os diálogos? */
+let dialogsLoaded = false;
 
 export function readerConfigured(): boolean {
   return Boolean(process.env.TELEGRAM_API_ID && process.env.TELEGRAM_API_HASH && process.env.TELEGRAM_USER_SESSION);
@@ -16,6 +19,7 @@ export function readerConfigured(): boolean {
 
 async function getClient(): Promise<TelegramClient> {
   if (client?.connected) return client;
+  dialogsLoaded = false;
   client = new TelegramClient(
     new StringSession(process.env.TELEGRAM_USER_SESSION ?? ''),
     Number(process.env.TELEGRAM_API_ID),
@@ -31,13 +35,49 @@ async function getClient(): Promise<TelegramClient> {
 
 export const linkHash = (sourceId: string, url: string) => createHash('sha256').update(`${sourceId}|${url}`).digest('hex');
 
-/** Segue encurtadores até a página da loja (sem baixar a página inteira quando possível). */
+const MAX_HOPS = 5;
+const HOP_TIMEOUT_MS = 8_000;
+/** Teto de links resolvidos por rodada: a fila de curadoria roda um job por vez e não pode travar. */
+const MAX_LINKS_PER_RUN = 30;
+
+/**
+ * Segue encurtadores até a página da loja, um salto por vez (`redirect: 'manual'`), conferindo
+ * cada destino com `isAllowedHop` antes de requisitar. Nunca baixa a página da loja.
+ */
 export async function resolveLink(url: string): Promise<string> {
-  const host = new URL(url).hostname.toLowerCase();
-  if (!SHORTENERS.test(host)) return url;
-  const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(15_000) });
-  await res.body?.cancel().catch(() => undefined);
-  return res.url || url;
+  let current = new URL(url);
+  for (let hop = 0; hop <= MAX_HOPS; hop++) {
+    if (!isAllowedHop(current)) throw new Error(`destino não permitido: ${current.hostname}`);
+    if (!SHORTENERS.test(current.hostname)) return current.href; // chegou na loja
+    const res = await fetch(current, { redirect: 'manual', signal: AbortSignal.timeout(HOP_TIMEOUT_MS) });
+    await res.body?.cancel().catch(() => undefined);
+    const location = res.headers.get('location');
+    if (res.status < 300 || res.status >= 400 || !location) return current.href;
+    current = new URL(location, current);
+  }
+  throw new Error('redirecionamentos demais');
+}
+
+/**
+ * Grupo informado pelo ID numérico: o GramJS só acha pelo ID o que já está no cache de entidades,
+ * que começa vazio numa sessão nova. Carregar os diálogos uma vez preenche o cache
+ * (a conta precisa ser membro do grupo, o que já é exigido para ler).
+ */
+async function entityById(tg: TelegramClient, chat: string) {
+  const id = returnBigInt(chat);
+  try {
+    return await tg.getInputEntity(id);
+  } catch {
+    if (!dialogsLoaded) {
+      await tg.getDialogs({ limit: 500 });
+      dialogsLoaded = true;
+    }
+    try {
+      return await tg.getInputEntity(id);
+    } catch {
+      throw new Error(`grupo ${chat} não encontrado: a conta dedicada precisa ser membro (ou use o @usuario)`);
+    }
+  }
 }
 
 export interface ReadResult {
@@ -53,19 +93,25 @@ export interface ReadResult {
  */
 export async function readSource(chat: string, lastMessageId: bigint | null): Promise<ReadResult> {
   const tg = await getClient();
-  const entity = /^-?\d+$/.test(chat) ? BigInt(chat) : chat;
+  const entity = /^-?\d+$/.test(chat) ? await entityById(tg, chat) : chat;
   const msgs = await tg.getMessages(entity as never, lastMessageId ? { minId: Number(lastMessageId), limit: 100 } : { limit: 20 });
   const productUrls: ReadResult['productUrls'] = [];
   let maxId = lastMessageId ? Number(lastMessageId) : 0;
+  const links = new Set<string>();
   for (const m of msgs) {
     maxId = Math.max(maxId, m.id);
-    for (const link of extractLinks(m as unknown as MessageLike)) {
-      try {
-        const canonical = canonicalProductUrl(await resolveLink(link));
-        if (canonical) productUrls.push({ original: link, canonical });
-      } catch {
-        /* link quebrado ou fora do ar: ignora */
+    for (const link of extractLinks(m as unknown as MessageLike)) links.add(link);
+  }
+  const seen = new Set<string>();
+  for (const link of [...links].slice(0, MAX_LINKS_PER_RUN)) {
+    try {
+      const canonical = canonicalProductUrl(await resolveLink(link));
+      if (canonical && !seen.has(canonical)) {
+        seen.add(canonical);
+        productUrls.push({ original: link, canonical });
       }
+    } catch {
+      /* link quebrado, fora do ar ou destino não permitido: ignora */
     }
   }
   return { productUrls, lastMessageId: maxId || null, messages: msgs.length };

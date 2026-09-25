@@ -229,7 +229,13 @@ model SeenLink {
   urlHash   String        @unique
   source    ChannelSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   sourceId  String
+  /// URL canônica do produto (para tentar de novo quando a loja falhou)
+  url       String?
+  /// DONE = já decidido (sugerido, fora do nicho, loja sem integração); RETRY = falha passageira
+  status    String        @default("DONE")
+  attempts  Int           @default(0)
   createdAt DateTime      @default(now())
+  updatedAt DateTime      @default(now()) @updatedAt
 
-  @@index([sourceId])
+  @@index([sourceId, status])
 }

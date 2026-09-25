@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { prisma } from '@cupons/db';
+import { isProtectedApi } from '../routeGuard.js';
 import { burnVerifyTime, hashPassword, passwordProblem, temporaryPassword, verifyPassword } from './password.js';
 import {
   audit,
@@ -51,7 +52,7 @@ async function wouldLeaveNoDev(userId: string, next: { role?: string; active?: b
 export function registerAuth(app: FastifyInstance): void {
   // ------------------------------------------------------------ guard (toda rota /api/* de admin)
   app.addHook('onRequest', async (req, reply) => {
-    if (!req.url.startsWith('/api/') || req.url.startsWith('/api/health') || req.url.startsWith('/api/public/')) return;
+    if (!isProtectedApi(req)) return;
     const cfg = req.routeOptions.config ?? {};
     if (cfg.noSession) return;
 
@@ -133,19 +134,43 @@ export function registerAuth(app: FastifyInstance): void {
         await audit(req, 'login_failed', null, `e-mail sem conta ativa: ${mail}`, null);
         return fail();
       }
-      if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
-        const min = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
-        await audit(req, 'login_blocked', user.id, 'tentativa com conta bloqueada', user.id);
+      const locked = (until = Date.now() + LOCK_MS) => {
+        const min = Math.max(1, Math.ceil((until - Date.now()) / 60000));
         return reply.code(429).send({ ok: false, error: `Muitas tentativas. Tente de novo em ${min} min.` });
+      };
+      if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+        await audit(req, 'login_blocked', user.id, 'tentativa com conta bloqueada', user.id);
+        return locked(user.lockedUntil.getTime());
+      }
+      if (user.lockedUntil) {
+        // bloqueio venceu: zera a contagem (updateMany com a condição evita apagar um bloqueio recém-criado)
+        await prisma.adminUser.updateMany({
+          where: { id: user.id, lockedUntil: { lte: new Date() } },
+          data: { failedLogins: 0, lockedUntil: null },
+        });
+      }
+
+      // Reserva a tentativa ANTES de conferir a senha, com incremento atômico: um lote em paralelo
+      // não consegue ler o mesmo contador e passar do limite.
+      const { failedLogins: attempt } = await prisma.adminUser.update({
+        where: { id: user.id },
+        data: { failedLogins: { increment: 1 } },
+        select: { failedLogins: true },
+      });
+      if (attempt > MAX_FAILED) {
+        await prisma.adminUser.updateMany({
+          where: { id: user.id, OR: [{ lockedUntil: null }, { lockedUntil: { lte: new Date() } }] },
+          data: { lockedUntil: new Date(Date.now() + LOCK_MS) },
+        });
+        await audit(req, 'login_blocked', user.id, 'tentativa acima do limite', user.id);
+        return locked();
       }
       if (!(await verifyPassword(body.password, user.passwordHash))) {
-        const failed = user.failedLogins + 1;
-        const lock = failed >= MAX_FAILED;
-        await prisma.adminUser.update({
-          where: { id: user.id },
-          data: lock ? { failedLogins: 0, lockedUntil: new Date(Date.now() + LOCK_MS) } : { failedLogins: failed },
-        });
-        await audit(req, lock ? 'account_locked' : 'login_failed', user.id, lock ? `bloqueada por ${LOCK_MS / 60000} min` : `tentativa ${failed}`, user.id);
+        const lock = attempt >= MAX_FAILED;
+        if (lock) {
+          await prisma.adminUser.update({ where: { id: user.id }, data: { lockedUntil: new Date(Date.now() + LOCK_MS) } });
+        }
+        await audit(req, lock ? 'account_locked' : 'login_failed', user.id, lock ? `bloqueada por ${LOCK_MS / 60000} min` : `tentativa ${attempt}`, user.id);
         return fail();
       }
 

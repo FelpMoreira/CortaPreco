@@ -236,13 +236,13 @@ function SuggestionCard({ s, notify, onDone }: { s: SuggestionRow; notify: Notif
           <div className="spread">
             <div className="row">
               <span className={`badge ${p.store}`}>{p.store}</span>
-              <span className="badge" title="Nota da curadoria (0-100)" style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}>
+              <span className="badge" title="Nota da curadoria (0-100)">
                 {s.score}
               </span>
               {!pending && <span className={`badge ${s.status === 'APPROVED' ? 'POSTED' : 'CANCELED'}`}>{STATUS_LABEL[s.status] ?? s.status}</span>}
             </div>
             <span className="muted">
-              {s.channel ? <strong style={{ color: 'var(--accent)' }}>Para: {s.channel.name} · </strong> : null}
+              {s.channel ? <strong style={{ color: 'var(--text)' }}>Para: {s.channel.name} · </strong> : null}
               {s.origin ? `fonte: ${s.origin.label} · ` : ''}
               {s.curator} · {fmtDate(s.decidedAt ?? s.createdAt)}
               {s.decidedBy ? ` · por ${s.decidedBy.name}` : ''}

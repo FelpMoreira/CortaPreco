@@ -61,7 +61,7 @@ export function Shell<T extends string>({
   }
 
   return (
-    <div className={`shell${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
+    <div className={`shell admin${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
       <div className="side-overlay" onClick={() => setMobileOpen(false)} />
       <aside className="sidebar" aria-label="Menu do painel">
         <div className="sidebar-head">

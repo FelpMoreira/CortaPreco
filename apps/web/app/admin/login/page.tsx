@@ -51,7 +51,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 16 }}>
+    <main className="admin" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 16 }}>
       <div style={{ position: 'fixed', top: 16, right: 16 }}>
         <ThemeToggle />
       </div>

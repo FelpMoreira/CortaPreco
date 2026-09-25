@@ -39,6 +39,21 @@ export function extractLinks(msg: MessageLike): string[] {
 /** Encurtadores comuns em grupos de oferta: precisam ser seguidos para achar a loja. */
 export const SHORTENERS = /(^|\.)(amzn\.to|a\.co|amzn\.eu|shope\.ee|s\.shopee\.com\.br|s\.click\.aliexpress\.com|a\.aliexpress\.com|bit\.ly|tinyurl\.com|cutt\.ly|encurtador\.com\.br|compre\.vc|ali\.ski)$/i;
 
+/** Domínios das lojas: ao chegar num deles, o link está resolvido (não baixamos a página aqui). */
+export const STORE_HOSTS = /(^|\.)(amazon\.com(\.br)?|aliexpress\.(com|us)|shopee\.com\.br)$/i;
+
+/**
+ * Cada salto de um link vindo de outro grupo precisa ser http(s) na porta padrão, sem usuário/senha,
+ * e cair num encurtador conhecido ou numa loja. Bloqueia SSRF: um bit.ly apontando para
+ * `http://api:3001/...` ou `169.254.169.254` morre aqui, antes de qualquer requisição.
+ */
+export function isAllowedHop(u: URL): boolean {
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+  if (u.username || u.password || u.port) return false;
+  const host = u.hostname.toLowerCase();
+  return SHORTENERS.test(host) || STORE_HOSTS.test(host);
+}
+
 /**
  * URL do produto sem o rastreio de quem postou (afiliado/tag/sub-id deles).
  * O link de afiliado é gerado depois, com o NOSSO tracking.

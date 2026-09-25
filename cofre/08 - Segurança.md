@@ -44,7 +44,10 @@
 
 **Configuração**
 - Em produção a API **não sobe** com `ADMIN_API_KEY` < 32 ou `PUBLIC_BASE_URL` sem https;
-  o painel não abre com `JWT_SECRET` < 32 nem aceita `ADMIN_PASSWORD` < 12.
+  `ADMIN_PASSWORD` só confirma o 1º acesso (criar o primeiro DEV); `JWT_SECRET` não é mais usado.
+- Guard de auth da API decide pelo **padrão da rota casada**, nunca pelo texto da URL (`/%61pi/...` burlava).
+- Portas de Postgres, Redis e API publicadas só em `127.0.0.1`; o web fala com a API pela rede do Docker.
+- Painel atrás de proxy: `TRUST_PROXY_HOPS` = nº de proxies, senão o IP do limite de login pode ser forjado.
 
 ## Riscos aceitos (por enquanto)
 

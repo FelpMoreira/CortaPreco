@@ -168,7 +168,7 @@ export async function schedulePostForProduct(
   }
 
   const category = product.category ?? 'outros';
-  const channels = opts?.targetChannelId
+  let channels = opts?.targetChannelId
     ? // garimpado para um canal: o destino + os gerais que aceitam essa nota
       await prisma.channel.findMany({
         where: {
@@ -185,6 +185,20 @@ export async function schedulePostForProduct(
         where: { enabled: true, OR: [{ categories: { isEmpty: true } }, { categories: { has: category } }] },
         orderBy: { createdAt: 'asc' },
       });
+  if (opts?.targetChannelId) {
+    // os gerais entram "de carona": se já postaram este produto há pouco, ficam de fora
+    // (a curadoria só confere o intervalo de repost no canal de destino)
+    const since = new Date(Date.now() - config.repostCooldownDays * 86_400_000);
+    const recent = await prisma.post.findMany({
+      where: {
+        productId,
+        channelId: { in: channels.filter((c) => c.id !== opts.targetChannelId).map((c) => c.id) },
+        postedAt: { gte: since },
+      },
+      select: { channelId: true },
+    });
+    channels = channels.filter((c) => c.id === opts.targetChannelId || !recent.some((r) => r.channelId === c.id));
+  }
   if (channels.length === 0) {
     throw new Error(
       opts?.targetChannelId
@@ -247,16 +261,28 @@ export async function approveSuggestion(
   const finalHook = hook === undefined ? suggestion.hook : sanitizeHook(hook);
   if (hook && !finalHook) throw new Error('Frase inválida: sem números, preços, %, links ou HTML (máx. 140)');
 
-  const scheduled = await schedulePostForProduct(suggestion.productId, {
-    hook: finalHook,
-    publishNow: opts.publishNow,
-    targetChannelId: suggestion.channelId,
-    score: suggestion.score,
+  // "reserva" a sugestão de forma atômica antes de agendar: dois cliques (ou duas pessoas)
+  // ao mesmo tempo não conseguem agendar o mesmo post duas vezes
+  const { count } = await prisma.suggestion.updateMany({
+    where: { id, status: 'PENDING' },
+    data: { status: 'APPROVED', hook: finalHook, decidedAt: new Date(), decidedById: opts.userId },
   });
-  await prisma.suggestion.update({
-    where: { id },
-    data: { status: 'APPROVED', hook: finalHook, postId: scheduled.id, decidedAt: new Date(), decidedById: opts.userId },
-  });
+  if (count === 0) throw new Error('Sugestão já foi decidida');
+
+  let scheduled: ScheduledPosts;
+  try {
+    scheduled = await schedulePostForProduct(suggestion.productId, {
+      hook: finalHook,
+      publishNow: opts.publishNow,
+      targetChannelId: suggestion.channelId,
+      score: suggestion.score,
+    });
+  } catch (err) {
+    // não agendou nada: devolve a sugestão para a fila de decisão
+    await prisma.suggestion.update({ where: { id }, data: { status: 'PENDING', decidedAt: null, decidedById: null } });
+    throw err;
+  }
+  await prisma.suggestion.update({ where: { id }, data: { postId: scheduled.id } });
   // aprovada e agendada; se o "agora" esbarrar no limite de algum canal, aquele post fica na fila normal
   return {
     postId: scheduled.id,

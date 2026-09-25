@@ -5,6 +5,7 @@ import { afterQuietHours, channelPacing, prisma } from '@cupons/db';
 import { curatorFromEnv } from '@cupons/curator';
 import { config } from './config.js';
 import { registerAuth } from './auth/routes.js';
+import { isProtectedApi } from './routeGuard.js';
 import { audit } from './auth/sessions.js';
 import { checkTelegramChat, sendTelegramTest } from './telegram.js';
 import { CATEGORIES, SEARCH_TERMS } from '@cupons/shared';
@@ -30,9 +31,6 @@ function isAdminKey(authorization: string | undefined): boolean {
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
 
-/** Rotas /api/* que não exigem a chave de admin. */
-const PUBLIC_API = ['/api/health', '/api/public/'];
-
 /** Ids gerados pelo Prisma (cuid): barra lixo antes de ir ao banco. */
 const ID_PATTERN = '^[a-z0-9]{20,40}$';
 const idParams = {
@@ -54,7 +52,7 @@ export function buildServer(): FastifyInstance {
 
   // auth de admin para tudo em /api/*, exceto as rotas públicas
   app.addHook('onRequest', async (req, reply) => {
-    if (!req.url.startsWith('/api/') || PUBLIC_API.some((p) => req.url.startsWith(p))) return;
+    if (!isProtectedApi(req)) return;
     if (!isAdminKey(req.headers.authorization)) {
       return reply.code(401).send({ ok: false, error: 'Não autorizado' });
     }
@@ -568,10 +566,24 @@ export function buildServer(): FastifyInstance {
   app.patch(
     '/api/sources/:id',
     { config: { roles: ['DEV'] }, schema: { params: idParams, body: { ...sourceBody, minProperties: 1 } } },
-    async (req) => {
+    async (req, reply) => {
       const { id } = req.params as { id: string };
-      const source = await prisma.channelSource.update({ where: { id }, data: sourceData(req.body as SourceInput) as never });
-      await audit(req, 'source.update', id, JSON.stringify(req.body).slice(0, 300));
+      const body = req.body as SourceInput;
+      const current = await prisma.channelSource.findUnique({ where: { id } });
+      if (!current) return reply.code(404).send({ ok: false, error: 'Fonte não encontrada.' });
+      // valida o estado FINAL (o que já existe + o que mudou), como na criação
+      const kind = body.kind ?? current.kind;
+      const stores = body.stores ?? current.stores;
+      const chat = (body.telegramChat ?? current.telegramChat ?? '').trim();
+      if (kind === 'API' && !stores.length) return reply.code(400).send({ ok: false, error: 'Escolha pelo menos uma loja.' });
+      if (kind === 'TELEGRAM' && !chat) return reply.code(400).send({ ok: false, error: 'Informe o @ ou o ID do grupo/canal de origem.' });
+      // o número das mensagens é por grupo: trocou o grupo (ou o tipo), volta a ler do começo
+      const restart = kind !== current.kind || chat !== (current.telegramChat ?? '');
+      const source = await prisma.channelSource.update({
+        where: { id },
+        data: { ...(sourceData(body) as object), ...(restart ? { lastMessageId: null } : {}) } as never,
+      });
+      await audit(req, 'source.update', id, JSON.stringify(body).slice(0, 300));
       return { ok: true, source: { ...source, lastMessageId: source.lastMessageId?.toString() ?? null } };
     },
   );

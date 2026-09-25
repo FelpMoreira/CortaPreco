@@ -86,6 +86,15 @@
   leitor GramJS, extração/limpeza de links (11 casos ok), login interativo; falta conta dedicada p/ teste real.
   Corrigido: edição de canal mandava campos extras (a API recusaria).
 
+- **2026-09-25** — revisão de segurança (3 agentes: revisão, checagem técnica, lacunas de lançamento). Corrigido:
+  **auth da API burlável** com caminho codificado (`/%61pi/users` passava sem login; guard agora decide pela rota casada,
+  `apps/api/src/routeGuard.ts`); portas de Postgres/Redis/API só em `127.0.0.1`; bloqueio de login atômico
+  (20 tentativas paralelas → só 5 senhas conferidas) + limite por e-mail no painel + IP pelo `TRUST_PROXY_HOPS`;
+  SSRF nos links de outros grupos (cada salto conferido, só encurtador/loja, máx. 5 saltos, 30 links/rodada);
+  post repetido nos gerais (intervalo de repost vale para eles) e aprovação dupla (reserva atômica); trocar o grupo
+  de uma fonte zera a leitura; grupo por ID numérico carrega os diálogos; link que falhou na loja volta a ser tentado
+  (até 3×). Painel com paleta neutra (verde só em ação principal/item ativo/sucesso).
+
 ## Regras de ouro
 
 1. **Números nunca vêm de IA** — texto pode ser gerado; preço/desconto vêm do banco.

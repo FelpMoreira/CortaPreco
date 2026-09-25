@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: cupons
       POSTGRES_DB: cupons
     ports:
-      - "5434:5432"
+      - "127.0.0.1:5434:5432"
     volumes:
       - cupons-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +23,7 @@ services:
     container_name: cupons-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - cupons-redisdata:/data
     healthcheck:
@@ -75,7 +75,7 @@ services:
       API_HOST: 0.0.0.0
       TRUST_PROXY: "false"
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     command: ["npm", "run", "dev:api"]
     depends_on:
       postgres:
