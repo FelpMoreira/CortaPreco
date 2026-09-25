@@ -1130,3 +1130,50 @@ img.pthumb {
 .admin .tab[aria-selected='true'] {
   border-bottom-color: var(--text);
 }
+
+.auto-box {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-hover);
+}
+.auto-box input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+/* ---------- filas por grupo ---------- */
+.queues {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
+  align-items: start;
+}
+.queue-count {
+  display: grid;
+  justify-items: end;
+  line-height: 1.1;
+}
+.queue-count strong {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.queue-count span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.queue-sources {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.queue-card .panel-title {
+  flex-wrap: wrap;
+}

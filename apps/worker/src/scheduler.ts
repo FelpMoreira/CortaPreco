@@ -8,8 +8,10 @@ export const publishQueue = new Queue('publish', { connection: { url: config.red
 // o painel mostra "próximo post às…" com a mesma conta.
 export { inQuietHours, minGapMs } from '@cupons/db';
 
+const QUEUE_MAX_AGE_MS = 24 * 3_600_000;
+
 /**
- * Tick (a cada minuto): para cada canal ativo, pega o post agendado mais antigo e
+ * Tick (a cada minuto): para cada canal ativo, pega o post agendado de maior nota e
  * enfileira o envio, respeitando o ritmo do canal (por hora, por dia, silêncio, jitter).
  */
 export async function tickScheduler(): Promise<void> {
@@ -20,6 +22,13 @@ export async function tickScheduler(): Promise<void> {
   await prisma.post.updateMany({
     where: { status: 'POSTING', updatedAt: { lt: new Date(now - 15 * 60 * 1000) } },
     data: { status: 'FAILED', lastError: 'Envio interrompido (worker caiu?). Confira o canal antes de reenviar.' },
+  });
+
+  // a fila sai pela nota: o que ficou 24h sem sair (sempre havia oferta melhor) já envelheceu.
+  // O que alguém agendou à mão (prioridade 100) não expira sozinho.
+  await prisma.post.updateMany({
+    where: { status: 'SCHEDULED', priority: { lt: 100 }, createdAt: { lt: new Date(now - QUEUE_MAX_AGE_MS) } },
+    data: { status: 'CANCELED', lastError: 'Expirou: 24h na fila sem sair (ofertas melhores passaram na frente)' },
   });
 
   const channels = await prisma.channel.findMany({ where: { enabled: true } });
@@ -35,7 +44,8 @@ async function tickChannel(channel: Channel, now: number): Promise<void> {
   const where = { channelId: channel.id };
   const pending = await prisma.post.findFirst({
     where: { ...where, status: 'SCHEDULED' },
-    orderBy: { createdAt: 'asc' },
+    // melhor oferta primeiro; empate → a mais antiga
+    orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
   });
   if (!pending) return;
 

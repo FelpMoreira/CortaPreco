@@ -14,6 +14,7 @@ const ALLOWED: [method: string, path: RegExp][] = [
   ['POST', new RegExp(`^posts/${ID}/(cancel|requeue|publish)$`)],
   ['GET', /^stats$/],
   ['GET', /^overview$/],
+  ['GET', /^queues$/],
   ['GET', /^channels$/],
   ['POST', /^channels$/],
   ['PATCH', new RegExp(`^channels/${ID}$`)],

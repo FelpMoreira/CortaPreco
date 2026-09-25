@@ -309,15 +309,37 @@ const loadSource = (id: string) => prisma.channelSource.findUnique({ where: { id
 async function tickSources(): Promise<{ queued: number }> {
   const sources = await prisma.channelSource.findMany({
     where: { enabled: true, channel: { enabled: true } },
-    select: { id: true, lastRunAt: true, intervalMin: true },
+    select: { id: true, channelId: true, lastRunAt: true, intervalMin: true, autoApprove: true, autoMinScore: true },
   });
   const now = Date.now();
-  const due = sources.filter((s) => !s.lastRunAt || now - s.lastRunAt.getTime() >= s.intervalMin * 60_000);
-  for (const s of due) {
+  const due: string[] = [];
+  for (const s of sources) {
+    const waited = !s.lastRunAt || now - s.lastRunAt.getTime() >= s.intervalMin * 60_000;
+    if (!waited) continue;
+    // Automática: busca quando a fila do canal está acabando, não por relógio. O intervalo vira
+    // "mínimo entre buscas" (não martela a loja quando a busca não acha nada que preste).
+    if (s.autoApprove && (await upcomingFor(s.channelId, s.id, s.autoMinScore)) >= REFILL_BELOW) continue;
+    due.push(s.id);
+  }
+  for (const id of due) {
     // jobId por fonte: não empilha a mesma fonte duas vezes enquanto uma rodada está na fila
-    await curateQueue.add('source', { kind: 'source', sourceId: s.id }, { jobId: `source-${s.id}`, removeOnComplete: true, removeOnFail: true });
+    await curateQueue.add('source', { kind: 'source', sourceId: id }, { jobId: `source-${id}`, removeOnComplete: true, removeOnFail: true });
   }
   return { queued: due.length };
+}
+
+/** Fila do canal abaixo disso → a fonte automática busca mais ofertas. */
+const REFILL_BELOW = 2;
+
+/** O que ainda vai sair no canal: posts na fila + sugestões desta fonte prestes a serem aprovadas sozinhas. */
+async function upcomingFor(channelId: string, sourceId: string, minScore: number): Promise<number> {
+  const [posts, ready] = await Promise.all([
+    prisma.post.count({ where: { channelId, status: { in: ['SCHEDULED', 'POSTING'] } } }),
+    prisma.suggestion.count({
+      where: { sourceId, status: 'PENDING', score: { gte: minScore }, createdAt: { gte: new Date(Date.now() - 12 * 3_600_000) } },
+    }),
+  ]);
+  return posts + ready;
 }
 
 export function discoverySources(): string[] {
@@ -351,7 +373,7 @@ export function createCurateWorker(): Worker {
 /** Agenda a descoberta periódica (se ligada e se houver rede com API configurada). */
 export async function scheduleDiscovery(): Promise<void> {
   // fontes dos canais: confere a cada 5 min quais estão na vez
-  await curateQueue.upsertJobScheduler('sources-tick', { every: 5 * 60_000 }, { name: 'sources-tick', data: { kind: 'sources-tick' } });
+  await curateQueue.upsertJobScheduler('sources-tick', { every: 2 * 60_000 }, { name: 'sources-tick', data: { kind: 'sources-tick' } });
 
   const every = config.curation.discoveryIntervalMin * 60 * 1000;
   if (!config.curation.discoveryEnabled || discoverySources().length === 0) {

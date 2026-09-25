@@ -227,7 +227,18 @@ export async function schedulePostForProduct(
     // assim o scheduler nunca vê o post com o marcador
     const post = await prisma.$transaction(async (tx) => {
       const draft = await tx.post.create({
-        data: { productId, channelId: channel.id, platform: channel.platform, message: template, affiliateUrl, subId, status: 'SCHEDULED' },
+        data: {
+          productId,
+          channelId: channel.id,
+          platform: channel.platform,
+          message: template,
+          affiliateUrl,
+          subId,
+          status: 'SCHEDULED',
+          // a fila sai pela nota; o que alguém agendou à mão passa na frente das sugestões
+          priority: opts?.score ?? 100,
+          price: product.price,
+        },
       });
       const html = template.replaceAll(LINK_PLACEHOLDER, escapeHtml(trackedLink(draft.id, affiliateUrl)));
       const message = channel.platform === 'WHATSAPP' ? telegramHtmlToWhatsApp(html) : html;

@@ -38,6 +38,17 @@ export interface AffiliateProvider {
    * entra quando houver acesso à Creators API.
    */
   discover?(opts: DiscoverOptions): Promise<DiscoveredProduct[]>;
+  /**
+   * Preço atual pela API oficial, sem cair para a página (opcional). Usado para conferir a oferta
+   * logo antes de postar. Lança erro se a API falhar; `available: false` = produto fora da loja/promoção.
+   */
+  quote?(url: string): Promise<Quote>;
+}
+
+export interface Quote {
+  available: boolean;
+  price: number | null;
+  oldPrice: number | null;
 }
 
 export interface DiscoverOptions {

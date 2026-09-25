@@ -144,13 +144,16 @@ export function ProductsTab({ notify, onPost }: { notify: Notify; onPost: (p: Pr
 
 const POST_FILTERS = ['', 'SCHEDULED', 'POSTING', 'POSTED', 'FAILED', 'CANCELED'];
 
-export function PostsTab({ notify }: { notify: Notify }) {
+export function PostsTab({ notify, channels }: { notify: Notify; channels: { id: string; name: string }[] }) {
   const [status, setStatus] = useState('');
-  const fetchPosts = useCallback(
-    () =>
-      adminFetch<{ posts: PostRow[]; publicBaseUrl: string | null }>(`posts${status ? `?status=${status}` : ''}`),
-    [status],
-  );
+  const [channelId, setChannelId] = useState('');
+  const fetchPosts = useCallback(() => {
+    const q = new URLSearchParams();
+    if (status) q.set('status', status);
+    if (channelId) q.set('channelId', channelId);
+    const qs = q.toString();
+    return adminFetch<{ posts: PostRow[]; publicBaseUrl: string | null }>(`posts${qs ? `?${qs}` : ''}`);
+  }, [status, channelId]);
   const { data, loading, reload } = useLoad(fetchPosts, notify, 20_000);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -184,6 +187,16 @@ export function PostsTab({ notify }: { notify: Notify }) {
               {s ? STATUS_LABEL[s] : 'Todos'}
             </button>
           ))}
+          {channels.length > 1 && (
+            <select className="input" style={{ width: 'auto', padding: '4px 10px', fontSize: 13 }} value={channelId} onChange={(e) => setChannelId(e.target.value)} aria-label="Filtrar por grupo">
+              <option value="">Todos os grupos</option>
+              {channels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <button className="btn ghost sm" onClick={() => void reload()}>
           Atualizar

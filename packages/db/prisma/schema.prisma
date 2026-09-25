@@ -49,6 +49,12 @@ model Post {
   affiliateUrl       String
   subId              String?
   status             String   @default("SCHEDULED")
+  /// Ordem na fila: nota da oferta (0-100); agendado à mão = 100. A fila sai da maior para a menor.
+  priority           Int      @default(50)
+  /// Preço anunciado na mensagem (conferido na loja antes de enviar)
+  price              Decimal? @db.Decimal(10, 2)
+  /// Falhas seguidas ao conferir o preço (API fora do ar); desiste na 3ª
+  checkErrors        Int      @default(0)
   telegramMessageId  Int?
   lastError          String?
   postedAt           DateTime?
@@ -59,7 +65,7 @@ model Post {
   @@index([status])
   @@index([postedAt])
   @@index([createdAt])
-  @@index([channelId, status])
+  @@index([channelId, status, priority])
 }
 
 model Click {
@@ -213,6 +219,9 @@ model ChannelSource {
   excludeWords  String[]  @default([])
   maxPerRun     Int       @default(5)
   intervalMin   Int       @default(120)
+  /// Aprova sozinho as sugestões desta fonte com nota >= autoMinScore (sem passar pela aba Sugestões)
+  autoApprove   Boolean   @default(false)
+  autoMinScore  Int       @default(70)
   lastRunAt     DateTime?
   lastResult    String?   // resumo ou erro da última rodada
   createdAt     DateTime  @default(now())

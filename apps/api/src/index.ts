@@ -3,6 +3,7 @@ import './env.js';
 import { prisma, syncChannels } from '@cupons/db';
 import { assertSafeConfig, config } from './config.js';
 import { buildServer } from './server.js';
+import { startAutoApprove } from './autoApprove.js';
 
 assertSafeConfig();
 // canais (Telegram/WhatsApp) vêm do .env: o agendamento cria um post por canal ativo
@@ -19,6 +20,7 @@ process.on('SIGTERM', shutdown);
 
 try {
   await app.listen({ port: config.port, host: config.host });
+  startAutoApprove(app.log);
 } catch (err) {
   app.log.error(err);
   process.exit(1);

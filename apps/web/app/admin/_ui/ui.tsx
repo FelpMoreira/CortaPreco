@@ -65,7 +65,7 @@ export interface ChannelOverview {
   postedLastHour: number;
   postedLast24h: number;
   dailyCap: number | null;
-  upcoming: { id: string; eta: string; product: { title: string; store: string; imageUrl: string | null } }[];
+  upcoming: { id: string; eta: string; priority?: number; product: { title: string; store: string; imageUrl: string | null } }[];
 }
 
 export const hhmm = (iso: string | null) =>

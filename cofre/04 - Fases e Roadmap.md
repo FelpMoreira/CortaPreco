@@ -45,7 +45,7 @@
 - [ ] Conectar a conta dedicada do Telegram e validar leitura de um grupo real
 - [ ] Escolher provedor de IA (comparar custo) e ligar
 - [ ] Aprovação pelo privado do bot no Telegram (botões)
-- [ ] Modo automático (sem aprovação) depois de confiar nas escolhas
+- [x] Modo automático (sem aprovação) por fonte, com nota mínima (D22)
 - [ ] Amazon automática só via Creators API (scraping viola as Condições de Uso)
 - [x] Multicanal: um post aprovado sai em cada canal ativo, cada um com seu ritmo (D18)
 - [x] Envio WhatsApp pela Evolution API + formatação própria + aquecimento/jitter/silêncio

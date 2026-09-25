@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { LuRadioTower, LuChartColumn, LuKeyRound, LuLayoutDashboard, LuPackage, LuPlus, LuScrollText, LuSend, LuSparkles, LuUserRound, LuUsers } from 'react-icons/lu';
+import { LuRadioTower, LuChartColumn, LuKeyRound, LuLayoutDashboard, LuListOrdered, LuPackage, LuPlus, LuScrollText, LuSend, LuSparkles, LuUserRound, LuUsers } from 'react-icons/lu';
 import { AccountTab, PasswordForm } from './_ui/Account';
 import { AuditTab } from './_ui/Audit';
 import { ChannelsTab } from './_ui/Channels';
@@ -9,20 +9,22 @@ import { adminFetch, ROLE_LABEL, Toast, type Me, type Notify, type ProductRow } 
 import { UsersTab } from './_ui/Users';
 import { OfferEditor } from './_ui/OfferEditor';
 import { OverviewTab } from './_ui/Overview';
+import { QueuesTab } from './_ui/Queues';
 import { Shell } from './_ui/Shell';
 import { SuggestionsTab } from './_ui/Suggestions';
 import { MetricsTab, PostsTab, ProductsTab } from './_ui/Tabs';
 import { PageHeader, QueueBanner, type ChannelOverview } from './_ui/ui';
 
-type Tab = 'visao' | 'sugestoes' | 'nova' | 'posts' | 'produtos' | 'metricas' | 'canais' | 'conta' | 'usuarios' | 'auditoria';
-const TABS: Tab[] = ['visao', 'sugestoes', 'nova', 'posts', 'produtos', 'metricas', 'canais', 'conta', 'usuarios', 'auditoria'];
+type Tab = 'visao' | 'sugestoes' | 'nova' | 'filas' | 'posts' | 'produtos' | 'metricas' | 'canais' | 'conta' | 'usuarios' | 'auditoria';
+const TABS: Tab[] = ['visao', 'sugestoes', 'nova', 'filas', 'posts', 'produtos', 'metricas', 'canais', 'conta', 'usuarios', 'auditoria'];
 const DEV_ONLY: Tab[] = ['usuarios', 'auditoria'];
 
 const TITLES: Record<Tab, string> = {
   visao: 'Visão geral',
   sugestoes: 'Sugestões',
   nova: 'Nova oferta',
-  posts: 'Posts e fila',
+  filas: 'Filas',
+  posts: 'Posts',
   produtos: 'Produtos',
   metricas: 'Métricas',
   canais: 'Canais',
@@ -32,7 +34,7 @@ const TITLES: Record<Tab, string> = {
 };
 
 interface OverviewLite {
-  stats: { pendingSuggestions: number };
+  stats: { pendingSuggestions: number; scheduled: number };
   channels: ChannelOverview[];
 }
 
@@ -98,7 +100,8 @@ export default function AdminDashboard() {
           count: overview?.stats.pendingSuggestions,
         },
         { id: 'nova' as const, label: 'Nova oferta', icon: <LuPlus size={18} /> },
-        { id: 'posts' as const, label: 'Posts e fila', icon: <LuSend size={18} /> },
+        { id: 'filas' as const, label: 'Filas', icon: <LuListOrdered size={18} />, count: overview?.stats.scheduled || undefined },
+        { id: 'posts' as const, label: 'Posts', icon: <LuSend size={18} /> },
       ],
     },
     {
@@ -157,6 +160,7 @@ export default function AdminDashboard() {
       {tab === 'usuarios' && me?.role === 'DEV' && <UsersTab me={me} notify={notify} />}
       {tab === 'auditoria' && me?.role === 'DEV' && <AuditTab notify={notify} />}
       {tab === 'visao' && <OverviewTab notify={notify} onGo={go} />}
+      {tab === 'filas' && <QueuesTab notify={notify} />}
 
       {tab === 'sugestoes' && (
         <>
@@ -188,11 +192,11 @@ export default function AdminDashboard() {
 
       {tab === 'posts' && (
         <>
-          <PageHeader icon={<LuSend size={22} />} title="Posts e fila" subtitle="Tudo que foi agendado, enviado ou falhou." />
+          <PageHeader icon={<LuSend size={22} />} title="Posts" subtitle="Tudo que foi agendado, enviado ou falhou, em todos os grupos." />
           <div className="grid" style={{ gap: 10, marginBottom: 16 }}>
             {overview?.channels.map((c) => <QueueBanner key={c.id} channel={c} />)}
           </div>
-          <PostsTab notify={notify} />
+          <PostsTab notify={notify} channels={overview?.channels ?? []} />
         </>
       )}
 

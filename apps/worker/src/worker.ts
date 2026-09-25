@@ -3,6 +3,7 @@ import { prisma } from '@cupons/db';
 import { config } from './config.js';
 import { sendTelegramMessage, sendTelegramPhoto } from './sender.js';
 import { sendWhatsApp } from './whatsapp.js';
+import { verifyBeforePosting } from './verify.js';
 
 /** Telegram: foto + legenda (HTML); se a imagem falhar, só texto. */
 async function sendTelegram(target: string, message: string, imageUrl: string | null): Promise<number | null> {
@@ -30,6 +31,24 @@ export function createPublishWorker(): Worker {
       // (ex.: falha só no update abaixo) encontra POSTED e não duplica no canal
       if (post.status !== 'POSTING') return;
 
+      // oferta ainda vale? (preço/estoque na loja agora). Cancelar libera a vez para o próximo da fila.
+      const verdict = await verifyBeforePosting(post);
+      if (verdict.action === 'cancel') {
+        console.log(`[worker] post ${postId} cancelado: ${verdict.reason}`);
+        await prisma.post.update({ where: { id: postId }, data: { status: 'CANCELED', lastError: verdict.reason } });
+        return;
+      }
+      if (verdict.action === 'retry') {
+        console.warn(`[worker] post ${postId} volta para a fila: ${verdict.reason}`);
+        await prisma.post.update({
+          where: { id: postId },
+          data: { status: 'SCHEDULED', lastError: verdict.reason, checkErrors: { increment: 1 } },
+        });
+        return;
+      }
+      if (verdict.note) console.log(`[worker] post ${postId}: ${verdict.note}`);
+      const message = verdict.message;
+
       // pacing: evita rajada ao mesmo chat (~1 msg/s já é seguro p/ a Bot API)
       await new Promise((r) => setTimeout(r, 1200 + Math.floor(Math.random() * 800)));
 
@@ -37,16 +56,16 @@ export function createPublishWorker(): Worker {
       let telegramMessageId: number | null = null;
       if (platform === 'WHATSAPP') {
         if (!post.channel) throw new Error('Post de WhatsApp sem canal');
-        await sendWhatsApp(post.channel.target, post.message, post.product.imageUrl);
+        await sendWhatsApp(post.channel.target, message, post.product.imageUrl);
       } else {
         const target = post.channel?.target ?? config.telegramChannel;
         if (!target) throw new Error('TELEGRAM_CHANNEL não configurado');
-        telegramMessageId = await sendTelegram(target, post.message, post.product.imageUrl);
+        telegramMessageId = await sendTelegram(target, message, post.product.imageUrl);
       }
 
       await prisma.post.update({
         where: { id: postId },
-        data: { status: 'POSTED', postedAt: new Date(), telegramMessageId, lastError: null },
+        data: { status: 'POSTED', postedAt: new Date(), telegramMessageId, lastError: null, message },
       });
 
       // produto também vai pra POSTED-equivalente (expirações futuras tratam o resto)

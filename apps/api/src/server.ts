@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
-import { afterQuietHours, channelPacing, prisma } from '@cupons/db';
+import { afterQuietHours, channelPacing, prisma, type Channel } from '@cupons/db';
 import { curatorFromEnv } from '@cupons/curator';
 import { config } from './config.js';
 import { registerAuth } from './auth/routes.js';
@@ -43,6 +43,37 @@ const idParams = {
 const PREVIEW_BOTS = /TelegramBot|WhatsApp|facebookexternalhit|Twitterbot|Slackbot|Discordbot|bot\b|crawler|spider/i;
 
 const POST_STATUSES = ['SCHEDULED', 'POSTING', 'POSTED', 'FAILED', 'CANCELED'];
+
+/**
+ * Ritmo do canal + fila com horário previsto: o primeiro sai em `nextAt`; os seguintes, a cada
+ * intervalo base, pulando o silêncio. É estimativa (um "postar agora" ou aprovação nova mudam a ordem).
+ */
+async function channelQueue(ch: Channel, now: number, take: number) {
+  const pacing = await channelPacing(ch, now);
+  const queue = await prisma.post.findMany({
+    where: { channelId: ch.id, status: 'SCHEDULED' },
+    // mesma ordem do scheduler: maior nota primeiro
+    orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+    take,
+    select: { id: true, priority: true, product: { select: { title: true, store: true, imageUrl: true } } },
+  });
+  const step = (60 * 60 * 1000) / Math.max(ch.postsPerHour, 1);
+  let eta = pacing.nextAt ? Math.max(pacing.nextAt.getTime(), now) : now;
+  const upcoming = queue.map((q, i) => {
+    if (i > 0) eta += step;
+    if (ch.quietHours) eta = afterQuietHours(ch.quietHours, new Date(eta)).getTime();
+    return { ...q, eta: new Date(eta) };
+  });
+  return {
+    id: ch.id,
+    name: ch.name,
+    platform: ch.platform,
+    postsPerHour: ch.postsPerHour,
+    quietHours: ch.quietHours,
+    ...pacing,
+    upcoming,
+  };
+}
 
 export function buildServer(): FastifyInstance {
   const app = Fastify({ logger: true, trustProxy: config.trustProxy, bodyLimit: 64 * 1024 });
@@ -179,13 +210,16 @@ export function buildServer(): FastifyInstance {
     '/api/posts',
     {
       schema: {
-        querystring: { type: 'object', properties: { status: { type: 'string', enum: POST_STATUSES } } },
+        querystring: {
+          type: 'object',
+          properties: { status: { type: 'string', enum: POST_STATUSES }, channelId: { type: 'string', pattern: ID_PATTERN } },
+        },
       },
     },
     async (req) => {
-      const { status } = req.query as { status?: string };
+      const { status, channelId } = req.query as { status?: string; channelId?: string };
       const posts = await prisma.post.findMany({
-        where: status ? { status } : undefined,
+        where: { ...(status ? { status } : {}), ...(channelId ? { channelId } : {}) },
         orderBy: { createdAt: 'desc' },
         take: 100,
         include: {
@@ -519,6 +553,8 @@ export function buildServer(): FastifyInstance {
       excludeWords: { type: 'array', maxItems: 50, items: { type: 'string', minLength: 2, maxLength: 60 } },
       maxPerRun: { type: 'integer', minimum: 1, maximum: 20 },
       intervalMin: { type: 'integer', minimum: 10, maximum: 1440 },
+      autoApprove: { type: 'boolean' },
+      autoMinScore: { type: 'integer', minimum: 0, maximum: 100 },
     },
   } as const;
   type SourceInput = Record<string, unknown> & { kind?: 'API' | 'TELEGRAM'; telegramChat?: string; stores?: string[] };
@@ -616,40 +652,38 @@ export function buildServer(): FastifyInstance {
     }
   });
 
+  // ---------- filas: uma por canal, completa, com as fontes que a abastecem ----------
+  app.get('/api/queues', async () => {
+    const now = Date.now();
+    const channels = await prisma.channel.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: {
+        sources: {
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, kind: true, label: true, enabled: true, autoApprove: true, autoMinScore: true, lastRunAt: true, lastResult: true },
+        },
+        _count: { select: { suggestions: { where: { status: 'PENDING' } } } },
+      },
+    });
+    const queues = await Promise.all(
+      channels.map(async (ch) => ({
+        ...(await channelQueue(ch, now, 50)),
+        enabled: ch.enabled,
+        categories: ch.categories,
+        pendingSuggestions: ch._count.suggestions,
+        sources: ch.sources,
+      })),
+    );
+    return { ok: true, now: new Date(now), queues };
+  });
+
   // ---------- visão geral (admin): números + ritmo de cada canal + previsão da fila ----------
   app.get('/api/overview', async () => {
     const now = Date.now();
     const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
     const channels = await prisma.channel.findMany({ where: { enabled: true }, orderBy: { createdAt: 'asc' } });
 
-    const channelInfo = await Promise.all(
-      channels.map(async (ch) => {
-        const pacing = await channelPacing(ch, now);
-        const queue = await prisma.post.findMany({
-          where: { channelId: ch.id, status: 'SCHEDULED' },
-          orderBy: { createdAt: 'asc' },
-          take: 8,
-          select: { id: true, product: { select: { title: true, store: true, imageUrl: true } } },
-        });
-        // previsão: o primeiro sai em nextAt; os seguintes, a cada intervalo base, pulando o silêncio
-        const step = (60 * 60 * 1000) / Math.max(ch.postsPerHour, 1);
-        let eta = pacing.nextAt ? Math.max(pacing.nextAt.getTime(), now) : now;
-        const upcoming = queue.map((q, i) => {
-          if (i > 0) eta += step;
-          if (ch.quietHours) eta = afterQuietHours(ch.quietHours, new Date(eta)).getTime();
-          return { ...q, eta: new Date(eta) };
-        });
-        return {
-          id: ch.id,
-          name: ch.name,
-          platform: ch.platform,
-          postsPerHour: ch.postsPerHour,
-          quietHours: ch.quietHours,
-          ...pacing,
-          upcoming,
-        };
-      }),
-    );
+    const channelInfo = await Promise.all(channels.map((ch) => channelQueue(ch, now, 8)));
 
     const [clicks24h, posted24h, failed, pendingSuggestions, recent] = await Promise.all([
       prisma.click.count({ where: { createdAt: { gte: dayAgo } } }),

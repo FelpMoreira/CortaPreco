@@ -25,6 +25,8 @@
 | D19 | Acesso ao painel | Login **por usuário** com perfis **DEV** e **GERENTE**, sessões no servidor revogáveis, bloqueio por tentativas, auditoria (arquitetura do credluz adaptada) | Mais de uma pessoa opera o painel; saber quem aprovou/postou; senha única não escala |
 | D20 | Grupos por categoria | **Um bot só** para todos os grupos; canais cadastrados no painel com as categorias que recebem (nenhuma = geral). Produto ganha categoria automática por palavra-chave, ajustável no painel | Limites do Telegram são por chat; um token só; `.env` vira só semente do 1º canal |
 | D21 | Fontes por canal | Cada canal escolhe as fontes: **APIs oficiais** (lojas + termos prontos por categoria, editáveis + filtros) ou **outros grupos do Telegram** (conta de usuário dedicada, só leitura). Sugestão nasce com destino; o geral só recebe nicho com nota ≥ limiar (80). **1 bot posta tudo** | Grupo de nicho precisa de garimpo de nicho; bot não lê canais de terceiros; organização vem dos canais/filas, não do nº de bots |
+| D22 | Modo automático | **Por fonte**: "Postar automaticamente" + nota mínima (padrão 70). A API aprova a cada 1 min o que passar; freio de 8 posts na fila por canal e sugestão com mais de 12h não vai sozinha | Tira o gargalo da aprovação sem abrir mão do controle: dá para ligar só na fonte em que se confia; ritmo/silêncio seguem no scheduler |
+| D23 | Fila por qualidade | A fila sai pela **nota** (agendado à mão = 100, vai primeiro); post automático que passa 24h sem sair expira. **Preço conferido na loja antes de postar** (AliExpress via API): subiu > 2% ou sumiu → cancela; mudou pouco/caiu → sai com o valor de agora. Sem limite de tamanho de fila | O risco não é fila grande, é oferta velha; conferir na hora resolve na raiz e deixa a fila crescer à vontade |
 
 ## Log
 
@@ -94,6 +96,16 @@
   post repetido nos gerais (intervalo de repost vale para eles) e aprovação dupla (reserva atômica); trocar o grupo
   de uma fonte zera a leitura; grupo por ID numérico carrega os diálogos; link que falhou na loja volta a ser tentado
   (até 3×). Painel com paleta neutra (verde só em ação principal/item ativo/sucesso).
+
+- **2026-09-25** — modo automático por fonte (D22). Testado com canal falso: fonte desativada → nada; ativa → nota 75
+  aprovada só no canal de nicho (geral exige 80), nota 60 ficou para decisão manual. Auditoria `suggestion.auto_approve`.
+- **2026-09-25** — fonte automática **busca quando a fila do canal acaba** (< 2 posts + sugestões prontas), não por relógio;
+  o intervalo virou "mínimo entre buscas" (15 min ao ligar o automático). Testado: fila com 3 → não buscou em 22 min;
+  vazia → buscou em < 2 min. Página **Filas** (uma por grupo: horários previstos, postar agora/tirar da fila, fontes
+  de reposição) e filtro por grupo em Posts.
+- **2026-09-25** — fila por nota + conferência de preço antes de postar (D23); limites de 8 na fila removidos.
+  Testado com a API real: mesmo preço → posta; subiu 20% → cancela; caiu → posta com o preço novo; item inexistente → cancela.
+  API fora do ar: post com < 3h sai assim mesmo; mais velho volta para a fila e desiste na 3ª falha.
 
 ## Regras de ouro
 

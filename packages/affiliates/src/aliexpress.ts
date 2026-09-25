@@ -7,6 +7,7 @@ import {
   type DiscoverOptions,
   type DiscoveredProduct,
   type ProductData,
+  type Quote,
 } from './types.js';
 import { extractJsonLdProduct } from './utils.js';
 
@@ -335,6 +336,21 @@ export class AliExpressProvider implements AffiliateProvider {
       out.push(...(result.products?.product ?? []).flatMap((p) => mapProduct(p) ?? []));
     }
     return out;
+  }
+
+  async quote(url: string): Promise<Quote> {
+    const itemId = this.extractItemId(await this.resolve(url));
+    const result = (await this.call('aliexpress.affiliate.productdetail.get', {
+      product_ids: itemId,
+      fields: PRODUCT_FIELDS,
+      target_currency: 'BRL',
+      target_language: 'PT',
+      country: 'BR',
+      tracking_id: this.creds.trackingId,
+    })) as ProductsResult;
+    const p = result.products?.product?.[0];
+    const mapped = p ? mapProduct(p) : null;
+    return mapped ? { available: true, price: mapped.price, oldPrice: mapped.oldPrice } : { available: false, price: null, oldPrice: null };
   }
 
   async enrich(url: string): Promise<ProductData> {

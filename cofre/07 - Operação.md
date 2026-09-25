@@ -42,6 +42,14 @@ npm run dev:web               # :3000 — site em /, painel em /admin
     (sem o rastreio de quem postou) e gera sugestões com o nosso link, texto e imagem.
 - Sugestões chegam com **"Para: <canal>"**. O grupo geral só recebe nicho com nota ≥ o limiar dele (padrão 80).
 - "▶" roda a fonte na hora; o resultado da última rodada aparece no card da fonte.
+- **Postar automaticamente** (na fonte): busca sozinha quando a fila do canal baixa de 2 e manda para a fila o que
+  tiver nota ≥ o mínimo (checagem a cada 1–2 min). O intervalo da fonte vira o mínimo entre buscas.
+  Acompanhe em **Operação → Filas**.
+- **Ordem da fila**: maior nota primeiro (agendado à mão = prioridade máxima). Post automático com 24h na fila expira.
+- **Antes de postar** o worker confere o preço na loja (AliExpress): subiu > 2% ou saiu da promoção → post cancelado
+  com o motivo ("Oferta expirou…") e a vez passa para o próximo; mudou pouco ou caiu → sai com o preço atual.
+  Freios: até 8 posts na fila por canal; sugestão com mais de 12h fica para decisão manual. Cada aprovação automática
+  aparece na Auditoria (`suggestion.auto_approve`).
 
 ### Conectar a conta que lê outros grupos (uma vez)
 1. Conta/chip **dedicado** (não o pessoal). Entre nos grupos privados que quiser usar como fonte.

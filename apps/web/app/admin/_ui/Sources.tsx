@@ -20,6 +20,8 @@ export interface SourceRow {
   excludeWords: string[];
   maxPerRun: number;
   intervalMin: number;
+  autoApprove: boolean;
+  autoMinScore: number;
   lastRunAt: string | null;
   lastResult: string | null;
 }
@@ -181,12 +183,36 @@ function SourceForm({
           </div>
         </label>
         <label className="field">
-          <span>Sugestões por rodada / a cada (min)</span>
+          <span>{d.autoApprove ? 'Ofertas por busca / intervalo mín. (min)' : 'Sugestões por rodada / a cada (min)'}</span>
           <div className="row" style={{ flexWrap: 'nowrap' }}>
             <input className="input" type="number" min={1} max={20} value={d.maxPerRun} onChange={(e) => setD({ ...d, maxPerRun: Number(e.target.value) })} />
             <input className="input" type="number" min={10} max={1440} value={d.intervalMin} onChange={(e) => setD({ ...d, intervalMin: Number(e.target.value) })} />
           </div>
         </label>
+      </div>
+
+      <div className="auto-box">
+        <label className="row" style={{ gap: 10, cursor: 'pointer', flexWrap: 'nowrap' }}>
+          <input
+            type="checkbox"
+            checked={d.autoApprove}
+            // no automático o intervalo é só o mínimo entre buscas: 15 min deixa a fila ser reposta logo
+            onChange={(e) => setD({ ...d, autoApprove: e.target.checked, intervalMin: e.target.checked ? Math.min(d.intervalMin, 15) : d.intervalMin })}
+          />
+          <span>
+            <strong>Postar automaticamente</strong>
+            <span className="muted" style={{ display: 'block', fontSize: 13 }}>
+              Busca sozinha sempre que a fila do canal estiver acabando e manda para a fila o que tiver nota alta, sem
+              passar pela aba Sugestões. Ritmo e silêncio de madrugada do canal continuam valendo.
+            </span>
+          </span>
+        </label>
+        {d.autoApprove && (
+          <label className="field" style={{ maxWidth: 220 }}>
+            <span>Nota mínima para ir sozinha (0–100)</span>
+            <input className="input" type="number" min={0} max={100} value={d.autoMinScore} onChange={(e) => setD({ ...d, autoMinScore: Number(e.target.value) })} />
+          </label>
+        )}
       </div>
 
       {d.kind === 'TELEGRAM' && !presets.telegramReader && (
@@ -249,6 +275,8 @@ export function ChannelSources({
     excludeWords: [],
     maxPerRun: 5,
     intervalMin: kind === 'API' ? 120 : 30,
+    autoApprove: false,
+    autoMinScore: 70,
   });
 
   async function save(id: string | null, d: Draft) {
@@ -264,6 +292,8 @@ export function ChannelSources({
         minDiscount: d.minDiscount,
         maxPerRun: d.maxPerRun,
         intervalMin: d.intervalMin,
+        autoApprove: d.autoApprove,
+        autoMinScore: d.autoMinScore,
         minRating: d.minRating === null ? null : Number(d.minRating),
         minPrice: d.minPrice === null ? null : Number(d.minPrice),
         maxPrice: d.maxPrice === null ? null : Number(d.maxPrice),
@@ -332,7 +362,14 @@ export function ChannelSources({
               </strong>
               <span className="muted">
                 {s.keywords.length ? `${s.keywords.slice(0, 5).join(', ')}${s.keywords.length > 5 ? '…' : ''} · ` : ''}
-                desc. ≥ {s.minDiscount}%{s.minRating ? ` · nota ≥ ${Number(s.minRating)}` : ''} · até {s.maxPerRun} a cada {s.intervalMin} min
+                desc. ≥ {s.minDiscount}%{s.minRating ? ` · nota ≥ ${Number(s.minRating)}` : ''} · até {s.maxPerRun} {s.autoApprove ? `por busca (mín. ${s.intervalMin} min entre buscas)` : `a cada ${s.intervalMin} min`}
+              </span>
+              <span className="muted">
+                {s.autoApprove ? (
+                  <span className="badge POSTED">Automático · busca quando a fila acaba · nota ≥ {s.autoMinScore}</span>
+                ) : (
+                  <span className="badge">Com aprovação</span>
+                )}
               </span>
               <span className="muted">
                 {s.lastRunAt ? `Última rodada ${fmtDate(s.lastRunAt)}: ${s.lastResult ?? '—'}` : 'Ainda não rodou'}
