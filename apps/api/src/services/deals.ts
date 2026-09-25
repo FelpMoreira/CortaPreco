@@ -37,6 +37,7 @@ export interface ProductPatch {
   coupon?: string | null;
   imageUrl?: string | null;
   status?: 'NEW' | 'READY' | 'FILTERED' | 'EXPIRED';
+  category?: string;
 }
 
 /** Correção manual dos dados (o enrich por scrape erra). Recalcula o desconto. */
@@ -59,6 +60,7 @@ export async function updateProduct(id: string, patch: ProductPatch): Promise<Pr
       coupon: patch.coupon === undefined ? undefined : patch.coupon?.trim() || null,
       imageUrl: patch.imageUrl === undefined ? undefined : patch.imageUrl || null,
       status: patch.status,
+      category: patch.category,
     },
   });
 }
@@ -150,7 +152,14 @@ export interface ScheduledPosts {
  */
 export async function schedulePostForProduct(
   productId: string,
-  opts?: { messageOverride?: string; hook?: string | null; publishNow?: boolean },
+  opts?: {
+    messageOverride?: string;
+    hook?: string | null;
+    publishNow?: boolean;
+    /** Sugestão garimpada por uma fonte de canal: vai para esse canal (+ gerais, se a nota bater o limiar). */
+    targetChannelId?: string | null;
+    score?: number;
+  },
 ): Promise<ScheduledPosts> {
   const product = await prisma.product.findUnique({ where: { id: productId } });
   if (!product) throw new Error('Produto não encontrado');
@@ -158,8 +167,31 @@ export async function schedulePostForProduct(
     throw new Error('Produto sem preço (a loja não retornou o valor) — não dá pra publicar com R$ 0,00');
   }
 
-  const channels = await prisma.channel.findMany({ where: { enabled: true }, orderBy: { createdAt: 'asc' } });
-  if (channels.length === 0) throw new Error('Nenhum canal ativo (configure TELEGRAM_CHANNEL e/ou WhatsApp no .env)');
+  const category = product.category ?? 'outros';
+  const channels = opts?.targetChannelId
+    ? // garimpado para um canal: o destino + os gerais que aceitam essa nota
+      await prisma.channel.findMany({
+        where: {
+          enabled: true,
+          OR: [
+            { id: opts.targetChannelId },
+            { categories: { isEmpty: true }, generalMinScore: { lte: opts.score ?? 0 } },
+          ],
+        },
+        orderBy: { createdAt: 'asc' },
+      })
+    : // manual/sem destino: geral recebe tudo; os de categoria, só o que é deles
+      await prisma.channel.findMany({
+        where: { enabled: true, OR: [{ categories: { isEmpty: true } }, { categories: { has: category } }] },
+        orderBy: { createdAt: 'asc' },
+      });
+  if (channels.length === 0) {
+    throw new Error(
+      opts?.targetChannelId
+        ? 'O canal de destino desta sugestão está pausado ou foi removido.'
+        : `Nenhum canal ativo recebe a categoria "${category}". Ajuste em Administração → Canais.`,
+    );
+  }
 
   // dedup por canal: evita post duplicado do mesmo produto enquanto ainda pendente naquele canal
   const pending = await prisma.post.findMany({
@@ -215,7 +247,12 @@ export async function approveSuggestion(
   const finalHook = hook === undefined ? suggestion.hook : sanitizeHook(hook);
   if (hook && !finalHook) throw new Error('Frase inválida: sem números, preços, %, links ou HTML (máx. 140)');
 
-  const scheduled = await schedulePostForProduct(suggestion.productId, { hook: finalHook, publishNow: opts.publishNow });
+  const scheduled = await schedulePostForProduct(suggestion.productId, {
+    hook: finalHook,
+    publishNow: opts.publishNow,
+    targetChannelId: suggestion.channelId,
+    score: suggestion.score,
+  });
   await prisma.suggestion.update({
     where: { id },
     data: { status: 'APPROVED', hook: finalHook, postId: scheduled.id, decidedAt: new Date(), decidedById: opts.userId },

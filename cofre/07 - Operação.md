@@ -25,6 +25,30 @@ npm run dev:web               # :3000 — site em /, painel em /admin
   `docker compose exec api npm run admin:create -- --email pessoa@x.com --reset`
 - Conta bloqueada (5 senhas erradas): espera 15 min ou um DEV gera nova provisória.
 
+## Grupos por categoria
+
+1. Crie o grupo/canal no Telegram e adicione **o mesmo bot** como administrador.
+2. Mande `/chatid` lá dentro (o bot responde o ID — só para admins do bot).
+3. Painel → Administração → **Canais** → Novo canal: cole o ID, marque as categorias. O sistema confere se o bot pode postar.
+4. "Testar" manda uma mensagem de verificação. Canal sem categoria marcada = **geral** (recebe tudo).
+- Cada oferta vai para o geral + os canais da categoria dela. Ajuste a categoria no editor, na sugestão ou em Produtos.
+
+## Fontes de ofertas por canal
+
+- Canais → em cada canal, **Fontes de ofertas**:
+  - **APIs oficiais**: lojas disponíveis (AliExpress hoje), termos prontos da categoria do canal (editáveis),
+    promoções do AliExpress, desconto/nota/preço mínimos, palavras a excluir, quantas sugestões a cada X min.
+  - **Grupo do Telegram**: `@canal` ou ID de outro grupo; lê as ofertas novas, aproveita **só o link do produto**
+    (sem o rastreio de quem postou) e gera sugestões com o nosso link, texto e imagem.
+- Sugestões chegam com **"Para: <canal>"**. O grupo geral só recebe nicho com nota ≥ o limiar dele (padrão 80).
+- "▶" roda a fonte na hora; o resultado da última rodada aparece no card da fonte.
+
+### Conectar a conta que lê outros grupos (uma vez)
+1. Conta/chip **dedicado** (não o pessoal). Entre nos grupos privados que quiser usar como fonte.
+2. my.telegram.org → API development tools → `TELEGRAM_API_ID` e `TELEGRAM_API_HASH` no `.env`.
+3. `docker compose exec -it worker npm run telegram:login` → telefone, código, 2FA → copie `TELEGRAM_USER_SESSION` para o `.env`.
+4. `docker compose up -d --force-recreate worker api`.
+
 ## Uso diário
 
 1. Painel → **Nova oferta** → cole a URL → **Buscar**.

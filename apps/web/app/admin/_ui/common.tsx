@@ -15,6 +15,7 @@ export interface ProductRow {
   imageUrl: string | null;
   url: string;
   status: string;
+  category: string | null;
   updatedAt: string;
   _count?: { posts: number };
 }

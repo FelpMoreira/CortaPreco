@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { LuChartColumn, LuKeyRound, LuLayoutDashboard, LuPackage, LuPlus, LuScrollText, LuSend, LuSparkles, LuUserRound, LuUsers } from 'react-icons/lu';
+import { LuRadioTower, LuChartColumn, LuKeyRound, LuLayoutDashboard, LuPackage, LuPlus, LuScrollText, LuSend, LuSparkles, LuUserRound, LuUsers } from 'react-icons/lu';
 import { AccountTab, PasswordForm } from './_ui/Account';
 import { AuditTab } from './_ui/Audit';
+import { ChannelsTab } from './_ui/Channels';
 import { adminFetch, ROLE_LABEL, Toast, type Me, type Notify, type ProductRow } from './_ui/common';
 import { UsersTab } from './_ui/Users';
 import { OfferEditor } from './_ui/OfferEditor';
@@ -13,8 +14,8 @@ import { SuggestionsTab } from './_ui/Suggestions';
 import { MetricsTab, PostsTab, ProductsTab } from './_ui/Tabs';
 import { PageHeader, QueueBanner, type ChannelOverview } from './_ui/ui';
 
-type Tab = 'visao' | 'sugestoes' | 'nova' | 'posts' | 'produtos' | 'metricas' | 'conta' | 'usuarios' | 'auditoria';
-const TABS: Tab[] = ['visao', 'sugestoes', 'nova', 'posts', 'produtos', 'metricas', 'conta', 'usuarios', 'auditoria'];
+type Tab = 'visao' | 'sugestoes' | 'nova' | 'posts' | 'produtos' | 'metricas' | 'canais' | 'conta' | 'usuarios' | 'auditoria';
+const TABS: Tab[] = ['visao', 'sugestoes', 'nova', 'posts', 'produtos', 'metricas', 'canais', 'conta', 'usuarios', 'auditoria'];
 const DEV_ONLY: Tab[] = ['usuarios', 'auditoria'];
 
 const TITLES: Record<Tab, string> = {
@@ -24,6 +25,7 @@ const TITLES: Record<Tab, string> = {
   posts: 'Posts e fila',
   produtos: 'Produtos',
   metricas: 'Métricas',
+  canais: 'Canais',
   conta: 'Minha conta',
   usuarios: 'Usuários',
   auditoria: 'Auditoria',
@@ -109,6 +111,7 @@ export default function AdminDashboard() {
     {
       title: 'Administração',
       items: [
+        { id: 'canais' as const, label: 'Canais', icon: <LuRadioTower size={18} /> },
         ...(me?.role === 'DEV'
           ? [
               { id: 'usuarios' as const, label: 'Usuários', icon: <LuUsers size={18} /> },
@@ -150,6 +153,7 @@ export default function AdminDashboard() {
     >
       {blocked && <div className="banner wait">Seu perfil não tem acesso a esta página.</div>}
       {tab === 'conta' && me && <AccountTab me={me} notify={notify} />}
+      {tab === 'canais' && me && <ChannelsTab me={me} notify={notify} />}
       {tab === 'usuarios' && me?.role === 'DEV' && <UsersTab me={me} notify={notify} />}
       {tab === 'auditoria' && me?.role === 'DEV' && <AuditTab notify={notify} />}
       {tab === 'visao' && <OverviewTab notify={notify} onGo={go} />}

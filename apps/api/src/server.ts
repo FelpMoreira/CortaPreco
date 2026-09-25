@@ -6,6 +6,8 @@ import { curatorFromEnv } from '@cupons/curator';
 import { config } from './config.js';
 import { registerAuth } from './auth/routes.js';
 import { audit } from './auth/sessions.js';
+import { checkTelegramChat, sendTelegramTest } from './telegram.js';
+import { CATEGORIES, SEARCH_TERMS } from '@cupons/shared';
 import { curateQueue, type CurateJob } from './queue.js';
 import {
   approveSuggestion,
@@ -157,6 +159,7 @@ export function buildServer(): FastifyInstance {
             coupon: { type: ['string', 'null'], maxLength: 60 },
             imageUrl: { type: ['string', 'null'], maxLength: 2048, pattern: '^(https://.*)?$' },
             status: { type: 'string', enum: ['NEW', 'READY', 'FILTERED', 'EXPIRED'] },
+            category: { type: 'string', enum: CATEGORIES.map((c) => c.slug) },
           },
         },
       },
@@ -269,22 +272,27 @@ export function buildServer(): FastifyInstance {
       schema: {
         querystring: {
           type: 'object',
-          properties: { status: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] } },
+          properties: {
+            status: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] },
+            channelId: { type: 'string', pattern: ID_PATTERN },
+          },
         },
       },
     },
     async (req) => {
-      const { status = 'PENDING' } = req.query as { status?: string };
+      const { status = 'PENDING', channelId } = req.query as { status?: string; channelId?: string };
       const suggestions = await prisma.suggestion.findMany({
-        where: { status },
+        where: { status, ...(channelId ? { channelId } : {}) },
         orderBy: status === 'PENDING' ? [{ score: 'desc' }, { createdAt: 'desc' }] : { decidedAt: 'desc' },
         take: 100,
         include: {
           decidedBy: { select: { name: true } },
+          channel: { select: { id: true, name: true } },
+          origin: { select: { kind: true, label: true } },
           product: {
             select: {
               id: true, store: true, title: true, imageUrl: true, price: true, oldPrice: true,
-              discountPct: true, coupon: true, url: true, rating: true, sales: true,
+              discountPct: true, coupon: true, url: true, rating: true, sales: true, category: true,
             },
           },
         },
@@ -394,6 +402,203 @@ export function buildServer(): FastifyInstance {
       await rejectSuggestion((req.params as { id: string }).id, req.admin!.id);
       await audit(req, 'suggestion.reject', (req.params as { id: string }).id);
       return { ok: true };
+    } catch (e) {
+      return reply.code(400).send({ ok: false, error: (e as Error).message });
+    }
+  });
+
+  // ---------- canais (listar: todos; criar/editar/testar: DEV) ----------
+  const channelBody = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      name: { type: 'string', minLength: 2, maxLength: 60 },
+      platform: { type: 'string', enum: ['TELEGRAM', 'WHATSAPP'] },
+      target: { type: 'string', minLength: 2, maxLength: 120, pattern: '^(-?\\d{5,20}|@[A-Za-z0-9_]{4,64}|[0-9]{5,30}@(g\\.us|newsletter))$' },
+      categories: { type: 'array', maxItems: 20, uniqueItems: true, items: { type: 'string', enum: CATEGORIES.map((c) => c.slug) } },
+      postsPerHour: { type: 'integer', minimum: 1, maximum: 30 },
+      postsPerDay: { type: 'integer', minimum: 0, maximum: 500 },
+      quietHours: { type: 'string', maxLength: 5, pattern: '^(\\d{1,2}-\\d{1,2})?$' },
+      jitterPct: { type: 'integer', minimum: 0, maximum: 80 },
+      warmupDays: { type: 'integer', minimum: 0, maximum: 60 },
+      generalMinScore: { type: 'integer', minimum: 0, maximum: 101 },
+      enabled: { type: 'boolean' },
+    },
+  } as const;
+  type ChannelInput = {
+    name?: string; platform?: 'TELEGRAM' | 'WHATSAPP'; target?: string; categories?: string[];
+    postsPerHour?: number; postsPerDay?: number; quietHours?: string; jitterPct?: number; warmupDays?: number;
+    generalMinScore?: number; enabled?: boolean;
+  };
+
+  app.get('/api/channels', async () => {
+    const channels = await prisma.channel.findMany({
+      orderBy: [{ enabled: 'desc' }, { createdAt: 'asc' }],
+      include: {
+        _count: { select: { posts: { where: { status: 'SCHEDULED' } } } },
+        sources: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+    // lastMessageId é BigInt: vira texto para o JSON
+    const out = channels.map((c) => ({ ...c, sources: c.sources.map((s) => ({ ...s, lastMessageId: s.lastMessageId?.toString() ?? null })) }));
+    return { ok: true, channels: out, categories: CATEGORIES.map(({ slug, label }) => ({ slug, label })) };
+  });
+
+  app.post(
+    '/api/channels',
+    { config: { roles: ['DEV'] }, schema: { body: { ...channelBody, required: ['name', 'platform', 'target'] } } },
+    async (req, reply) => {
+      const body = req.body as Required<Pick<ChannelInput, 'name' | 'platform' | 'target'>> & ChannelInput;
+      if (await prisma.channel.findUnique({ where: { platform_target: { platform: body.platform, target: body.target } } })) {
+        return reply.code(409).send({ ok: false, error: 'Esse grupo/canal já está cadastrado.' });
+      }
+      let detail = '';
+      if (body.platform === 'TELEGRAM') {
+        try {
+          const chat = await checkTelegramChat(body.target);
+          detail = `${chat.title} (${chat.type})`;
+        } catch (e) {
+          return reply.code(400).send({ ok: false, error: (e as Error).message });
+        }
+      }
+      // WhatsApp: padrões conservadores (API não oficial)
+      const wa = body.platform === 'WHATSAPP';
+      const channel = await prisma.channel.create({
+        data: {
+          name: body.name.trim(),
+          platform: body.platform,
+          target: body.target,
+          categories: body.categories ?? [],
+          postsPerHour: body.postsPerHour ?? (wa ? 2 : 3),
+          postsPerDay: body.postsPerDay ?? (wa ? 15 : 0),
+          quietHours: body.quietHours ?? (wa ? '22-8' : '23-7'),
+          jitterPct: body.jitterPct ?? (wa ? 35 : 0),
+          warmupDays: body.warmupDays ?? (wa ? 14 : 0),
+        },
+      });
+      await audit(req, 'channel.create', channel.id, `${channel.name} · ${body.target} ${detail}`);
+      return { ok: true, channel, chat: detail || null };
+    },
+  );
+
+  app.patch(
+    '/api/channels/:id',
+    { config: { roles: ['DEV'] }, schema: { params: idParams, body: { ...channelBody, minProperties: 1 } } },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = req.body as ChannelInput;
+      const current = await prisma.channel.findUnique({ where: { id } });
+      if (!current) return reply.code(404).send({ ok: false, error: 'Canal não encontrado.' });
+      if (body.target && body.target !== current.target && (body.platform ?? current.platform) === 'TELEGRAM') {
+        try {
+          await checkTelegramChat(body.target);
+        } catch (e) {
+          return reply.code(400).send({ ok: false, error: (e as Error).message });
+        }
+      }
+      const channel = await prisma.channel.update({ where: { id }, data: { ...body, name: body.name?.trim() } });
+      await audit(req, 'channel.update', id, JSON.stringify(body).slice(0, 300));
+      return { ok: true, channel };
+    },
+  );
+
+  // ---------- fontes de ofertas de cada canal ----------
+  const sourceBody = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      kind: { type: 'string', enum: ['API', 'TELEGRAM'] },
+      label: { type: 'string', minLength: 2, maxLength: 60 },
+      enabled: { type: 'boolean' },
+      stores: { type: 'array', maxItems: 3, uniqueItems: true, items: { type: 'string', enum: ['ALIEXPRESS', 'SHOPEE', 'AMAZON'] } },
+      keywords: { type: 'array', maxItems: 30, items: { type: 'string', minLength: 2, maxLength: 60 } },
+      promos: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 2, maxLength: 120 } },
+      telegramChat: { type: 'string', maxLength: 120, pattern: '^(@[A-Za-z0-9_]{4,64}|-?\\d{5,20})$' },
+      minDiscount: { type: 'integer', minimum: 0, maximum: 95 },
+      minRating: { type: ['number', 'null'], minimum: 0, maximum: 5 },
+      minPrice: { type: ['number', 'null'], minimum: 0, maximum: 1_000_000 },
+      maxPrice: { type: ['number', 'null'], minimum: 0, maximum: 1_000_000 },
+      excludeWords: { type: 'array', maxItems: 50, items: { type: 'string', minLength: 2, maxLength: 60 } },
+      maxPerRun: { type: 'integer', minimum: 1, maximum: 20 },
+      intervalMin: { type: 'integer', minimum: 10, maximum: 1440 },
+    },
+  } as const;
+  type SourceInput = Record<string, unknown> & { kind?: 'API' | 'TELEGRAM'; telegramChat?: string; stores?: string[] };
+  const cleanList = (l: unknown) => (Array.isArray(l) ? [...new Set(l.map((x) => String(x).trim()).filter(Boolean))] : undefined);
+  const sourceData = (b: SourceInput) => ({
+    ...b,
+    keywords: cleanList(b.keywords),
+    promos: cleanList(b.promos),
+    excludeWords: cleanList(b.excludeWords),
+    telegramChat: b.telegramChat?.trim(),
+  });
+
+  // termos prontos por categoria e promoções do AliExpress disponíveis (para montar o formulário)
+  app.get('/api/sources/presets', async () => {
+    const ali = registry.list().find((p) => p.store === 'ALIEXPRESS') as { promotions?: () => Promise<string[]> } | undefined;
+    const promos = ali?.promotions ? await ali.promotions().catch(() => []) : [];
+    return {
+      ok: true,
+      searchTerms: SEARCH_TERMS,
+      promos,
+      stores: {
+        ALIEXPRESS: registry.list().some((p) => p.store === 'ALIEXPRESS'),
+        SHOPEE: registry.list().some((p) => p.store === 'SHOPEE'),
+        AMAZON: false, // busca automática só com a Creators API
+      },
+      telegramReader: Boolean(process.env.TELEGRAM_API_ID && process.env.TELEGRAM_API_HASH && process.env.TELEGRAM_USER_SESSION),
+    };
+  });
+
+  app.post(
+    '/api/channels/:id/sources',
+    { config: { roles: ['DEV'] }, schema: { params: idParams, body: { ...sourceBody, required: ['kind', 'label'] } } },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = req.body as SourceInput;
+      if (!(await prisma.channel.findUnique({ where: { id } }))) return reply.code(404).send({ ok: false, error: 'Canal não encontrado.' });
+      if (body.kind === 'API' && !body.stores?.length) return reply.code(400).send({ ok: false, error: 'Escolha pelo menos uma loja.' });
+      if (body.kind === 'TELEGRAM' && !body.telegramChat) return reply.code(400).send({ ok: false, error: 'Informe o @ ou o ID do grupo/canal de origem.' });
+      const source = await prisma.channelSource.create({ data: { ...(sourceData(body) as object), channelId: id } as never });
+      await audit(req, 'source.create', source.id, `${source.kind} · ${source.label}`);
+      return { ok: true, source: { ...source, lastMessageId: null } };
+    },
+  );
+
+  app.patch(
+    '/api/sources/:id',
+    { config: { roles: ['DEV'] }, schema: { params: idParams, body: { ...sourceBody, minProperties: 1 } } },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      const source = await prisma.channelSource.update({ where: { id }, data: sourceData(req.body as SourceInput) as never });
+      await audit(req, 'source.update', id, JSON.stringify(req.body).slice(0, 300));
+      return { ok: true, source: { ...source, lastMessageId: source.lastMessageId?.toString() ?? null } };
+    },
+  );
+
+  app.post('/api/sources/:id/run', { config: { roles: ['DEV'] }, schema: { params: idParams } }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!(await prisma.channelSource.findUnique({ where: { id } }))) return reply.code(404).send({ ok: false, error: 'Fonte não encontrada.' });
+    await curateQueue.add('source', { kind: 'source', sourceId: id } satisfies CurateJob, {
+      jobId: `source-${id}`,
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+    await audit(req, 'source.run', id);
+    return { ok: true };
+  });
+
+  app.post('/api/channels/:id/test', { config: { roles: ['DEV'] }, schema: { params: idParams } }, async (req, reply) => {
+    const channel = await prisma.channel.findUnique({ where: { id: (req.params as { id: string }).id } });
+    if (!channel) return reply.code(404).send({ ok: false, error: 'Canal não encontrado.' });
+    if (channel.platform !== 'TELEGRAM') {
+      return reply.code(400).send({ ok: false, error: 'Teste disponível só para Telegram por enquanto.' });
+    }
+    try {
+      const chat = await checkTelegramChat(channel.target);
+      await sendTelegramTest(channel.target, `✅ <b>CortaPreço</b> conectado a este ${chat.type === 'channel' ? 'canal' : 'grupo'}.`);
+      await audit(req, 'channel.test', channel.id, chat.title);
+      return { ok: true, chat: chat.title };
     } catch (e) {
       return reply.code(400).send({ ok: false, error: (e as Error).message });
     }

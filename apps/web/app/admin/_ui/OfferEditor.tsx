@@ -5,6 +5,7 @@ import { LuSend } from 'react-icons/lu';
 import { LINK_PLACEHOLDER, renderMessageHtml, type Store } from '@cupons/shared';
 import { CAPTION_LIMIT, telegramLength, telegramToSafeHtml } from '@/lib/telegram';
 import { adminFetch, Badge, brl, parseMoney, type Notify, type ProductRow } from './common';
+import { CategorySelect } from './ui';
 
 const MAX_MESSAGE = 3500;
 
@@ -14,6 +15,7 @@ interface Form {
   oldPrice: string;
   coupon: string;
   imageUrl: string;
+  category: string;
 }
 
 const toInput = (v: string | null) => (v == null ? '' : Number(v).toFixed(2).replace('.', ','));
@@ -25,6 +27,7 @@ function formFrom(p: ProductRow): Form {
     oldPrice: toInput(p.oldPrice),
     coupon: p.coupon ?? '',
     imageUrl: p.imageUrl ?? '',
+    category: p.category ?? 'outros',
   };
 }
 
@@ -113,6 +116,7 @@ export function OfferEditor({
         oldPrice: oldPrice && oldPrice > price! ? oldPrice : null,
         coupon: form.coupon.trim() || null,
         imageUrl: form.imageUrl.trim() || null,
+        category: form.category,
       };
       const orig = formFrom(product);
       const dirty = (Object.keys(orig) as (keyof Form)[]).some((k) => orig[k] !== form[k]);
@@ -207,6 +211,10 @@ export function OfferEditor({
               <span>URL da imagem (opcional)</span>
               <input className="input" type="url" value={form.imageUrl} onChange={set('imageUrl')} maxLength={2048} />
             </label>
+            <div className="field">
+              <span>Categoria — define para quais grupos o post vai</span>
+              <CategorySelect value={form.category} onChange={(category) => setForm((f) => (f ? { ...f, category } : f))} />
+            </div>
 
             <p className="muted" style={{ margin: 0 }}>
               {brl(price)}

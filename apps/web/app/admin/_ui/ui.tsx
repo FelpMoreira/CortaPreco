@@ -1,7 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { LuCircleCheck, LuHourglass, LuInbox, LuSend } from 'react-icons/lu';
+import { LuCircleCheck, LuHourglass, LuInbox, LuSend, LuTag } from 'react-icons/lu';
+import { CATEGORIES } from '@cupons/shared';
 
 export function PageHeader({ icon, title, subtitle, actions }: { icon: ReactNode; title: string; subtitle?: string; actions?: ReactNode }) {
   return (
@@ -121,5 +122,27 @@ export function QueueBanner({ channel: c }: { channel: ChannelOverview }) {
         {c.scheduled} na fila
       </span>
     </div>
+  );
+}
+
+/** Categoria do produto: define para quais grupos o post vai. */
+export function CategorySelect({ value, onChange, disabled }: { value: string | null; onChange: (slug: string) => void; disabled?: boolean }) {
+  return (
+    <label className="row" style={{ gap: 6, flexWrap: 'nowrap' }} title="Categoria: define para quais grupos o post vai">
+      <LuTag size={14} style={{ color: 'var(--muted)', flex: 'none' }} />
+      <select
+        className="input"
+        style={{ padding: '5px 8px', width: 'auto', fontSize: 13 }}
+        value={value ?? 'outros'}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {CATEGORIES.map((c) => (
+          <option key={c.slug} value={c.slug}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

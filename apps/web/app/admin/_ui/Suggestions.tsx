@@ -5,6 +5,7 @@ import { LuCheck, LuRefreshCw, LuSearch, LuSend, LuSparkles, LuX } from 'react-i
 import { LINK_PLACEHOLDER, renderMessageHtml, type Store } from '@cupons/shared';
 import { telegramToSafeHtml } from '@/lib/telegram';
 import { adminFetch, brl, fmtDate, STATUS_LABEL, Thumb, type Notify } from './common';
+import { CategorySelect } from './ui';
 
 interface SuggestionRow {
   id: string;
@@ -18,6 +19,8 @@ interface SuggestionRow {
   createdAt: string;
   decidedAt: string | null;
   decidedBy: { name: string } | null;
+  channel: { id: string; name: string } | null;
+  origin: { kind: string; label: string } | null;
   product: {
     id: string;
     store: string;
@@ -30,6 +33,7 @@ interface SuggestionRow {
     url: string;
     rating: string | null;
     sales: number | null;
+    category: string | null;
   };
 }
 
@@ -46,17 +50,24 @@ const HOOK_INVALID = /\d|R\$|%|https?:|www\.|<|>/i;
 
 export function SuggestionsTab({ notify }: { notify: Notify }) {
   const [status, setStatus] = useState<(typeof FILTERS)[number]>('PENDING');
+  const [channelId, setChannelId] = useState('');
+  const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    adminFetch<{ channels: { id: string; name: string }[] }>('channels')
+      .then((r) => setChannels(r.channels))
+      .catch(() => undefined);
+  }, []);
   const [data, setData] = useState<SuggestionsResponse | null>(null);
   const [urls, setUrls] = useState('');
   const [sending, setSending] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setData(await adminFetch<SuggestionsResponse>(`suggestions?status=${status}`));
+      setData(await adminFetch<SuggestionsResponse>(`suggestions?status=${status}${channelId ? `&channelId=${channelId}` : ''}`));
     } catch (e) {
       notify('error', (e as Error).message);
     }
-  }, [status, notify]);
+  }, [status, channelId, notify]);
 
   // enquanto há lote rodando no worker, atualiza sozinho
   useEffect(() => {
@@ -145,12 +156,24 @@ export function SuggestionsTab({ notify }: { notify: Notify }) {
         </div>
       </div>
 
-      <div className="chips" role="group" aria-label="Filtrar sugestões">
-        {FILTERS.map((f) => (
-          <button key={f} className="chip" aria-pressed={status === f} onClick={() => setStatus(f)}>
-            {FILTER_LABEL[f]}
-          </button>
-        ))}
+      <div className="spread">
+        <div className="chips" role="group" aria-label="Filtrar sugestões">
+          {FILTERS.map((f) => (
+            <button key={f} className="chip" aria-pressed={status === f} onClick={() => setStatus(f)}>
+              {FILTER_LABEL[f]}
+            </button>
+          ))}
+        </div>
+        {channels.length > 1 && (
+          <select className="input" style={{ width: 'auto', padding: '6px 10px' }} value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+            <option value="">Todos os canais</option>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                Para: {c.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {!data ? (
@@ -168,6 +191,7 @@ export function SuggestionsTab({ notify }: { notify: Notify }) {
 
 function SuggestionCard({ s, notify, onDone }: { s: SuggestionRow; notify: Notify; onDone: () => Promise<void> }) {
   const [hook, setHook] = useState(s.hook ?? '');
+  const [category, setCategory] = useState(s.product.category);
   const [busy, setBusy] = useState(false);
   const p = s.product;
   const price = Number(p.price);
@@ -218,6 +242,8 @@ function SuggestionCard({ s, notify, onDone }: { s: SuggestionRow; notify: Notif
               {!pending && <span className={`badge ${s.status === 'APPROVED' ? 'POSTED' : 'CANCELED'}`}>{STATUS_LABEL[s.status] ?? s.status}</span>}
             </div>
             <span className="muted">
+              {s.channel ? <strong style={{ color: 'var(--accent)' }}>Para: {s.channel.name} · </strong> : null}
+              {s.origin ? `fonte: ${s.origin.label} · ` : ''}
               {s.curator} · {fmtDate(s.decidedAt ?? s.createdAt)}
               {s.decidedBy ? ` · por ${s.decidedBy.name}` : ''}
             </span>
@@ -234,6 +260,16 @@ function SuggestionCard({ s, notify, onDone }: { s: SuggestionRow; notify: Notif
           <span className="muted" style={{ fontStyle: 'italic' }}>
             {s.reason}
           </span>
+          {pending && (
+            <CategorySelect
+              value={category}
+              disabled={busy}
+              onChange={(slug) => {
+                setCategory(slug);
+                adminFetch(`products/${p.id}`, { method: 'PATCH', body: { category: slug } }).catch((e: Error) => notify('error', e.message));
+              }}
+            />
+          )}
         </div>
       </div>
 

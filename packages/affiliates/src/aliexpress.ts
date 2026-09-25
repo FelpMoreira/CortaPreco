@@ -248,15 +248,15 @@ export class AliExpressProvider implements AffiliateProvider {
   }
 
   /** Promoções relevantes para o Brasil, com cache de 6h (a lista muda com o calendário do site). */
-  async promotions(): Promise<string[]> {
-    if (this.promoCache && Date.now() - this.promoCache.at < 6 * 60 * 60 * 1000) return this.promoCache.names;
-    const result = (await this.call('aliexpress.affiliate.featuredpromo.get', {
-      fields: 'promo_name,product_num',
-    })) as { promos?: { promo?: Array<{ promo_name?: string; product_num?: number }> } };
-    const all = (result.promos?.promo ?? []).filter((p) => (p.product_num ?? 0) > 0).map((p) => String(p.promo_name).trim());
-    const names = relevantPromos(all, this.creds.promos);
-    this.promoCache = { at: Date.now(), names };
-    return names;
+  async promotions(choose?: string[]): Promise<string[]> {
+    if (!this.promoCache || Date.now() - this.promoCache.at >= 6 * 60 * 60 * 1000) {
+      const result = (await this.call('aliexpress.affiliate.featuredpromo.get', {
+        fields: 'promo_name,product_num',
+      })) as { promos?: { promo?: Array<{ promo_name?: string; product_num?: number }> } };
+      const all = (result.promos?.promo ?? []).filter((p) => (p.product_num ?? 0) > 0).map((p) => String(p.promo_name).trim());
+      this.promoCache = { at: Date.now(), names: all };
+    }
+    return relevantPromos(this.promoCache.names, choose?.length ? choose : this.creds.promos);
   }
 
   /** Mais vendidos de uma promoção em destaque, para o Brasil. */
@@ -289,7 +289,9 @@ export class AliExpressProvider implements AffiliateProvider {
       ship_to_country: 'BR',
       tracking_id: this.creds.trackingId,
     };
-    if (!opts.keyword && !this.hotProductDenied) {
+    // fonte de um canal: usa os termos/promoções dela (sem produtos em alta genéricos)
+    const sourceMode = Boolean(opts.keywords?.length || opts.promos?.length);
+    if (!sourceMode && !opts.keyword && !this.hotProductDenied) {
       try {
         const result = (await this.call('aliexpress.affiliate.hotproduct.query', {
           ...common,
@@ -306,9 +308,9 @@ export class AliExpressProvider implements AffiliateProvider {
     const out: DiscoveredProduct[] = [];
 
     // curadoria do próprio AliExpress: 1 promoção relevante por rodada, girando
-    if (!opts.keyword) {
+    if (!opts.keyword && (!sourceMode || opts.promos?.length)) {
       try {
-        const promos = await this.promotions();
+        const promos = await this.promotions(opts.promos);
         const [promo] = pickKeywords(promos, 1, round);
         if (promo) out.push(...(await this.promoProducts(promo, Math.ceil(opts.limit / 2))));
       } catch (err) {
@@ -316,8 +318,14 @@ export class AliExpressProvider implements AffiliateProvider {
       }
     }
 
-    const keywords = opts.keyword ? [opts.keyword] : pickKeywords(this.keywords, 1, round);
-    const perKeyword = Math.max(5, Math.ceil((opts.limit - out.length) / keywords.length));
+    const keywords = opts.keyword
+      ? [opts.keyword]
+      : opts.keywords?.length
+        ? pickKeywords(opts.keywords, 2, round) // fonte: 2 termos por rodada, girando
+        : sourceMode
+          ? []
+          : pickKeywords(this.keywords, 1, round);
+    const perKeyword = Math.max(5, Math.ceil((opts.limit - out.length) / Math.max(keywords.length, 1)));
     for (const keyword of keywords) {
       const result = (await this.call('aliexpress.affiliate.product.query', {
         ...common,

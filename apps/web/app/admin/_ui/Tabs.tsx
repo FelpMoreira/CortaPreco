@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { LuListOrdered, LuMousePointerClick, LuSend, LuTriangleAlert } from 'react-icons/lu';
-import { StatCard } from './ui';
+import { CategorySelect, StatCard } from './ui';
 import { adminFetch, Badge, brl, fmtDate, STATUS_LABEL, Thumb, type Notify, type PostRow, type ProductRow } from './common';
 
 /** Carrega dados e recarrega sob demanda (e opcionalmente em intervalo). */
@@ -79,6 +79,7 @@ export function ProductsTab({ notify, onPost }: { notify: Notify; onPost: (p: Pr
                 <th>Produto</th>
                 <th className="num">Preço</th>
                 <th className="num">Desc.</th>
+                <th>Categoria</th>
                 <th>Status</th>
                 <th className="num">Posts</th>
                 <th />
@@ -98,6 +99,17 @@ export function ProductsTab({ notify, onPost }: { notify: Notify; onPost: (p: Pr
                   </td>
                   <td className="num">{Number(p.price) > 0 ? brl(p.price) : <span className="warn">sem preço</span>}</td>
                   <td className="num">{p.discountPct ? `-${p.discountPct}%` : '—'}</td>
+                  <td>
+                    <CategorySelect
+                      value={p.category}
+                      disabled={busy === p.id}
+                      onChange={(category) =>
+                        void adminFetch(`products/${p.id}`, { method: 'PATCH', body: { category } })
+                          .then(reload)
+                          .catch((e: Error) => notify('error', e.message))
+                      }
+                    />
+                  </td>
                   <td>
                     <Badge value={p.status} />
                   </td>

@@ -49,25 +49,18 @@ export function channelsFromEnv(env: Env): ChannelConfig[] {
   return out;
 }
 
-/** Grava os canais do .env no banco (desliga os que saíram do .env) e devolve os ativos. */
+/**
+ * Semeia os canais do .env na primeira vez (canal ainda não existe no banco). Depois disso,
+ * nome, categorias, ritmo e ativação são geridos pelo painel — o .env não sobrescreve mais.
+ */
 export async function syncChannels(env: Env): Promise<Channel[]> {
-  const configs = channelsFromEnv(env);
-  const active: Channel[] = [];
-  for (const c of configs) {
+  for (const c of channelsFromEnv(env)) {
     const { platform, target, ...limits } = c;
-    active.push(
-      await prisma.channel.upsert({
-        where: { platform_target: { platform, target } },
-        update: { ...limits, enabled: true },
-        create: { platform, target, ...limits, enabled: true },
-      }),
-    );
+    const exists = await prisma.channel.findUnique({ where: { platform_target: { platform, target } } });
+    if (!exists) await prisma.channel.create({ data: { platform, target, ...limits, enabled: true } });
   }
-  await prisma.channel.updateMany({
-    where: { id: { notIn: active.map((c) => c.id) }, enabled: true },
-    data: { enabled: false },
-  });
-  // posts de antes dos canais existirem eram todos do Telegram
+  const active = await prisma.channel.findMany({ where: { enabled: true }, orderBy: { createdAt: 'asc' } });
+  // posts de antes dos canais existirem eram todos do primeiro Telegram
   const telegram = active.find((c) => c.platform === 'TELEGRAM');
   if (telegram) await prisma.post.updateMany({ where: { channelId: null }, data: { channelId: telegram.id } });
   return active;

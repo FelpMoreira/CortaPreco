@@ -208,7 +208,13 @@ export class ShopeeProvider implements AffiliateProvider {
   async discover(opts: DiscoverOptions): Promise<DiscoveredProduct[]> {
     const data = await this.graphql<{ productOfferV2: { nodes: ShopeeOfferNode[] } }>(
       productOfferQuery,
-      { keyword: opts.keyword ?? null, sortType: 2, page: opts.page ?? 1, limit: opts.limit },
+      {
+        // fonte de um canal: 1 termo por rodada, girando
+        keyword: opts.keyword ?? (opts.keywords?.length ? opts.keywords[Math.floor(Date.now() / 3_600_000) % opts.keywords.length] : null),
+        sortType: 2,
+        page: opts.page ?? 1,
+        limit: opts.limit,
+      },
       'productOfferV2',
     );
     return data.productOfferV2.nodes.flatMap((n): DiscoveredProduct[] => {

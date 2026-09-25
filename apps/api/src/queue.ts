@@ -4,7 +4,7 @@ import { config } from './config.js';
 /** Fila de curadoria: a API só enfileira; quem busca produtos e chama a IA é o worker. */
 export const curateQueue = new Queue('curate', { connection: { url: config.redisUrl } });
 
-export type CurateJob = { kind: 'urls'; urls: string[] } | { kind: 'discover' };
+export type CurateJob = { kind: 'urls'; urls: string[] } | { kind: 'discover' } | { kind: 'source'; sourceId: string };
 
 /** Mesma fila de envio que o scheduler do worker usa. */
 export const publishQueue = new Queue('publish', { connection: { url: config.redisUrl } });

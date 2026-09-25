@@ -44,6 +44,10 @@ export interface DiscoverOptions {
   limit: number;
   page?: number;
   keyword?: string;
+  /** Termos da fonte de um canal (a busca gira entre eles a cada rodada). */
+  keywords?: string[];
+  /** Promoções em destaque escolhidas pela fonte (trechos do nome; AliExpress). */
+  promos?: string[];
 }
 
 /** Produto vindo da API da rede, já com os dados de oferta. */

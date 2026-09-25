@@ -23,6 +23,8 @@
 | D17 | Subida local | **`docker compose up -d` sobe o stack inteiro em modo dev**; `db-init` roda `db:push` automaticamente; bot desativado sem `TELEGRAM_BOT_TOKEN`; override monta `apps/` + `packages/` p/ hot reload | Réplica do README num comando só, com rebuild necessário apenas quando `package.json`/schema mudarem |
 | D18 | Multicanal | Tabela `Channel` com ritmo **por canal**; post aprovado vira um envio por canal ativo (subID próprio, formato da plataforma). WhatsApp via **Evolution API** com padrões conservadores: 2/h, teto 15/dia, silêncio 22h–8h, intervalo ±35%, aquecimento de 14 dias | API oficial não serve (grupo máx. 8 pessoas, sem canais); não oficial = risco de ban, então ritmo humano |
 | D19 | Acesso ao painel | Login **por usuário** com perfis **DEV** e **GERENTE**, sessões no servidor revogáveis, bloqueio por tentativas, auditoria (arquitetura do credluz adaptada) | Mais de uma pessoa opera o painel; saber quem aprovou/postou; senha única não escala |
+| D20 | Grupos por categoria | **Um bot só** para todos os grupos; canais cadastrados no painel com as categorias que recebem (nenhuma = geral). Produto ganha categoria automática por palavra-chave, ajustável no painel | Limites do Telegram são por chat; um token só; `.env` vira só semente do 1º canal |
+| D21 | Fontes por canal | Cada canal escolhe as fontes: **APIs oficiais** (lojas + termos prontos por categoria, editáveis + filtros) ou **outros grupos do Telegram** (conta de usuário dedicada, só leitura). Sugestão nasce com destino; o geral só recebe nicho com nota ≥ limiar (80). **1 bot posta tudo** | Grupo de nicho precisa de garimpo de nicho; bot não lê canais de terceiros; organização vem dos canais/filas, não do nº de bots |
 
 ## Log
 
@@ -74,6 +76,15 @@
 - **2026-09-24** — login por usuário (D19): DEV/GERENTE, scrypt, sessões com hash no banco, bloqueio 5×/15 min,
   troca obrigatória de senha provisória, auditoria, páginas Usuários/Auditoria/Minha conta. Testado ponta a ponta
   com usuário descartável (removido). Primeiro DEV criado pelo script `admin:create`. `JWT_SECRET` deixou de ser usado.
+
+- **2026-09-24** — grupos por categoria (D20): 10 categorias padrão, classificador por palavra-chave (77 produtos
+  classificados), direcionamento geral + categoria, página Canais (DEV) que confere no Telegram se o bot pode
+  postar e manda mensagem de teste. Canais agora são geridos pelo painel.
+
+- **2026-09-24** — fontes por canal (D21). Etapa 1 (APIs) testada com AliExpress real: 18 vistos → 13 do nicho →
+  5 sugestões "Para: Games". Filtro de nicho, limiar do geral (85 → nicho+geral; 72 → só nicho). Etapa 2 (Telegram):
+  leitor GramJS, extração/limpeza de links (11 casos ok), login interativo; falta conta dedicada p/ teste real.
+  Corrigido: edição de canal mandava campos extras (a API recusaria).
 
 ## Regras de ouro
 

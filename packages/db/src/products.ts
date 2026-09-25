@@ -1,4 +1,5 @@
 import type { Prisma, Product } from '@prisma/client';
+import { classifyCategory, isCategory } from '@cupons/shared';
 import { prisma } from './client.js';
 
 // Tenant do MVP (single-tenant). Nunca null: no Postgres, NULLs em índice único
@@ -39,14 +40,17 @@ export async function upsertProduct(input: ProductInput): Promise<Product> {
     discountPct: input.discountPct,
     coupon: input.coupon,
     imageUrl: input.imageUrl,
-    category: input.category,
+    // categoria: slug nosso (a loja manda nomes livres); a escolha do admin não é sobrescrita depois
+    category: isCategory(input.category) ? input.category : classifyCategory(input.title, input.category),
     rating: input.rating,
     sales: input.sales,
     url: input.url,
   };
   // na atualização, dado que não veio (loja bloqueou, campo ausente) não apaga o que já temos
   const update = Object.fromEntries(
-    Object.entries(fields).filter(([k, v]) => v !== null && v !== undefined && !(k === 'price' && !(Number(v) > 0))),
+    Object.entries(fields).filter(
+      ([k, v]) => k !== 'category' && v !== null && v !== undefined && !(k === 'price' && !(Number(v) > 0)),
+    ),
   );
   const product = await prisma.product.upsert({
     where: {

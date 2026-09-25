@@ -20,7 +20,7 @@ model Product {
   discountPct    Int?
   coupon         String?
   imageUrl       String?
-  category       String?
+  category       String?   // slug de @cupons/shared CATEGORIES (palpite automático, admin pode trocar)
   rating         Decimal?  @db.Decimal(3, 2)
   sales          Int?
   url            String
@@ -86,9 +86,13 @@ model Channel {
   quietHours   String   @default("") // ex.: "23-7" (horário de Brasília)
   jitterPct    Int      @default(0)  // variação aleatória do intervalo, em %: evita padrão robótico
   warmupDays   Int      @default(0)  // rampa de volume p/ número novo (0 = sem rampa)
+  categories   String[] @default([]) // categorias que recebe (vazio = recebe tudo: grupo "geral")
+  generalMinScore Int   @default(80) // canal geral: só recebe ofertas garimpadas p/ nichos com nota >= isto
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   posts        Post[]
+  sources      ChannelSource[]
+  suggestions  Suggestion[]
 
   @@unique([platform, target])
 }
@@ -123,6 +127,10 @@ model Suggestion {
   postId     String?
   decidedBy  AdminUser? @relation(fields: [decidedById], references: [id], onDelete: SetNull)
   decidedById String?
+  channel    Channel?  @relation(fields: [channelId], references: [id], onDelete: SetNull) // destino (fonte do canal)
+  channelId  String?
+  origin     ChannelSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull) // fonte que achou
+  sourceId   String?
   createdAt  DateTime  @default(now())
   decidedAt  DateTime?
 
@@ -182,4 +190,46 @@ model AuditLog {
 
   @@index([createdAt])
   @@index([userId])
+}
+
+
+// De onde vêm as promoções de um canal: APIs oficiais das lojas ou outros grupos/canais do Telegram.
+model ChannelSource {
+  id            String    @id @default(cuid())
+  channel       Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channelId     String
+  kind          String    // API | TELEGRAM
+  label         String
+  enabled       Boolean   @default(true)
+  stores        String[]  @default([]) // API: ALIEXPRESS, SHOPEE, AMAZON
+  keywords      String[]  @default([]) // termos de busca (API) / termos que o título deve ter (filtro)
+  promos        String[]  @default([]) // promoções em destaque do AliExpress (trechos do nome)
+  telegramChat  String?   // TELEGRAM: @canal ou id
+  lastMessageId BigInt?   // TELEGRAM: última mensagem lida
+  minDiscount   Int       @default(0)
+  minRating     Decimal?  @db.Decimal(3, 2)
+  minPrice      Decimal?  @db.Decimal(10, 2)
+  maxPrice      Decimal?  @db.Decimal(10, 2)
+  excludeWords  String[]  @default([])
+  maxPerRun     Int       @default(5)
+  intervalMin   Int       @default(120)
+  lastRunAt     DateTime?
+  lastResult    String?   // resumo ou erro da última rodada
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  suggestions   Suggestion[]
+  seenLinks     SeenLink[]
+
+  @@index([channelId])
+}
+
+// Link já visto numa fonte do Telegram: não reprocessa.
+model SeenLink {
+  id        String        @id @default(cuid())
+  urlHash   String        @unique
+  source    ChannelSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId  String
+  createdAt DateTime      @default(now())
+
+  @@index([sourceId])
 }

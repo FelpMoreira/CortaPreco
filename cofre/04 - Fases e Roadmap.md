@@ -41,6 +41,8 @@
 - [x] Interface `Curator` trocável: `rules` (sem custo) e `claude` (liga com `LLM_PROVIDER=claude` + chave)
 - [x] Coletores Shopee (`productOfferV2`) e AliExpress (`hotproduct.query`) prontos — **validar com credencial real**
 - [x] Histórico de preço (anti-desconto-falso) e cooldown de repost
+- [x] Fontes de ofertas por canal: APIs oficiais (termos/filtros por nicho) e outros grupos do Telegram (D21)
+- [ ] Conectar a conta dedicada do Telegram e validar leitura de um grupo real
 - [ ] Escolher provedor de IA (comparar custo) e ligar
 - [ ] Aprovação pelo privado do bot no Telegram (botões)
 - [ ] Modo automático (sem aprovação) depois de confiar nas escolhas
