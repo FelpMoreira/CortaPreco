@@ -37,10 +37,15 @@ export function mirrorLinkType(url: string): MirrorLinkType | null {
 
 /** Fila BullMQ entre o worker (ouve o Telegram) e o linker (converte no navegador). */
 export const MIRROR_QUEUE = 'mirror';
-export interface MirrorJob {
-  /** SourceEvent criado pelo worker; o linker lê dele o link, a fonte e a hora de postar. */
-  eventId: string;
-}
+export type MirrorJob =
+  /** espelhamento: SourceEvent criado pelo worker; o linker lê dele o link, a fonte e a hora de postar */
+  | { eventId: string }
+  /** grupo de cupons: testar um cupom do Mercado Livre na conta de afiliado (cofre/11) */
+  | { couponId: string };
+
+/** Fila do canal de cupons (worker): agenda e publica cupons válidos com intervalo. */
+export const COUPON_POST_QUEUE = 'coupon-post';
+export type CouponPostJob = { couponId: string; step: 'schedule' | 'send' };
 
 /** Chaves de status no Redis (com validade): o painel mostra se cada peça está no ar. */
 export const MIRROR_STATUS_KEYS = {

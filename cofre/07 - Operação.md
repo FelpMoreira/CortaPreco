@@ -71,6 +71,14 @@ Nota completa: [[10 - Espelhamento Mercado Livre]]. Resumo:
 - Sessão do ML expira de tempos em tempos: o card avisa "sessão expirou" → rode `npm run ml:login` de novo.
 - Prints das falhas: `data/linker/debug/` (PNG + HTML, os 40 mais recentes). Logs: `docker compose logs -f linker`.
 
+## Grupo de cupons
+
+Nota completa: [[11 - Grupo de Cupons]]. Canais → canal → **🎟️ Grupo de cupons** → grupo (a conta dedicada precisa ser
+membro), lojas, e (opcional) **Publicar os cupons neste canal** + intervalo. Acompanhe em **Catálogo → Cupons**:
+- ML é testado sozinho (fica na conta de afiliado); "Testar" repete; "Funciona"/"Não funciona" corrige à mão;
+  "Usar nos posts" decide se vai junto das ofertas da loja (só cupons gerais vêm marcados).
+- Teste manual: `docker compose exec linker npm run ml:check -w @cupons/linker -- --cupom CODIGO`.
+
 ## Uso diário
 
 1. Painel → **Nova oferta** → cole a URL → **Buscar**.

@@ -20,7 +20,12 @@ export async function tickScheduler(): Promise<void> {
   // post preso em POSTING (worker caiu no meio) travaria a fila: marca FAILED p/ revisão manual,
   // sem reenviar sozinho — pode ter chegado ao canal
   await prisma.post.updateMany({
-    where: { status: 'POSTING', updatedAt: { lt: new Date(now - 15 * 60 * 1000) } },
+    where: {
+      status: 'POSTING',
+      updatedAt: { lt: new Date(now - 15 * 60 * 1000) },
+      // espelhamento com horário reservado ainda não chegou: está esperando a vez, não travado
+      OR: [{ sendAt: null }, { sendAt: { lt: new Date(now - 15 * 60 * 1000) } }],
+    },
     data: { status: 'FAILED', lastError: 'Envio interrompido (worker caiu?). Confira o canal antes de reenviar.' },
   });
 

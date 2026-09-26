@@ -16,12 +16,13 @@ import {
   MIRROR_MAX_DELAY_LIMIT_SEC,
   SEARCH_TERMS,
 } from '@cupons/shared';
-import { curateQueue, mirrorStatus, type CurateJob } from './queue.js';
+import { curateQueue, mirrorQueue, mirrorStatus, type CurateJob } from './queue.js';
 import {
   approveSuggestion,
   cancelPost,
   publishNow,
   createProductFromUrl,
+  couponForPost,
   defaultMessage,
   registry,
   rejectSuggestion,
@@ -165,7 +166,7 @@ export function buildServer(): FastifyInstance {
       const { url } = req.body as { url: string };
       try {
         const product = await createProductFromUrl(url);
-        return { ok: true, product, message: defaultMessage(product) };
+        return { ok: true, product, message: defaultMessage(product, null, (await couponForPost(product))?.line) };
       } catch (e) {
         return reply.code(400).send({ ok: false, error: (e as Error).message });
       }
@@ -208,7 +209,7 @@ export function buildServer(): FastifyInstance {
       try {
         const product = await updateProduct(id, req.body as ProductPatch);
         await audit(req, 'product.update', id, JSON.stringify(req.body).slice(0, 300));
-        return { ok: true, product, message: defaultMessage(product) };
+        return { ok: true, product, message: defaultMessage(product, null, (await couponForPost(product))?.line) };
       } catch (e) {
         return reply.code(400).send({ ok: false, error: (e as Error).message });
       }
@@ -549,10 +550,10 @@ export function buildServer(): FastifyInstance {
     type: 'object',
     additionalProperties: false,
     properties: {
-      kind: { type: 'string', enum: ['API', 'TELEGRAM', 'MIRROR'] },
+      kind: { type: 'string', enum: ['API', 'TELEGRAM', 'MIRROR', 'COUPONS'] },
       label: { type: 'string', minLength: 2, maxLength: 60 },
       enabled: { type: 'boolean' },
-      stores: { type: 'array', maxItems: 3, uniqueItems: true, items: { type: 'string', enum: ['ALIEXPRESS', 'SHOPEE', 'AMAZON'] } },
+      stores: { type: 'array', maxItems: 4, uniqueItems: true, items: { type: 'string', enum: ['ALIEXPRESS', 'SHOPEE', 'AMAZON', 'MERCADOLIVRE'] } },
       keywords: { type: 'array', maxItems: 30, items: { type: 'string', minLength: 2, maxLength: 60 } },
       promos: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 2, maxLength: 120 } },
       telegramChat: { type: 'string', maxLength: 120, pattern: '^(@[A-Za-z0-9_]{4,64}|-?\\d{5,20})$' },
@@ -569,18 +570,27 @@ export function buildServer(): FastifyInstance {
       linkTypes: { type: 'array', maxItems: 5, uniqueItems: true, items: { type: 'string', enum: MIRROR_LINK_TYPE_KEYS } },
       maxDelaySec: { type: 'integer', minimum: 0, maximum: MIRROR_MAX_DELAY_LIMIT_SEC },
       respectQuiet: { type: 'boolean' },
+      minGapSec: { type: 'integer', minimum: 0, maximum: 3600 },
+      // grupo de cupons (COUPONS): publicar os cupons válidos neste canal
+      postCoupons: { type: 'boolean' },
     },
   } as const;
   type SourceInput = Record<string, unknown> & {
-    kind?: 'API' | 'TELEGRAM' | 'MIRROR';
+    kind?: 'API' | 'TELEGRAM' | 'MIRROR' | 'COUPONS';
     telegramChat?: string;
     stores?: string[];
     linkTypes?: string[];
   };
   /** Regras por tipo, sobre o estado FINAL da fonte (criação ou edição). Devolve o erro ou null. */
-  const sourceProblem = (f: { kind: string; stores: string[]; chat: string; linkTypes: string[] }, platform: string): string | null => {
+  const sourceProblem = (
+    f: { kind: string; stores: string[]; chat: string; linkTypes: string[]; postCoupons?: boolean },
+    platform: string,
+  ): string | null => {
     if (f.kind === 'API' && !f.stores.length) return 'Escolha pelo menos uma loja.';
-    if ((f.kind === 'TELEGRAM' || f.kind === 'MIRROR') && !f.chat) return 'Informe o @ ou o ID do grupo/canal observado.';
+    if (f.kind === 'API' && f.stores.includes('MERCADOLIVRE')) return 'Mercado Livre não tem busca por API: use o espelhamento.';
+    if ((f.kind === 'TELEGRAM' || f.kind === 'MIRROR' || f.kind === 'COUPONS') && !f.chat) return 'Informe o @ ou o ID do grupo/canal observado.';
+    if (f.kind === 'COUPONS' && !f.stores.length) return 'Escolha de quais lojas os cupons interessam.';
+    if (f.kind === 'COUPONS' && f.postCoupons && platform !== 'TELEGRAM') return 'Publicar cupons só em canal do Telegram.';
     if (f.kind === 'MIRROR' && !f.linkTypes.length) return 'Escolha que tipo de link o espelhamento pega.';
     if (f.kind === 'MIRROR' && f.linkTypes.includes('AMAZON') && !process.env.AMAZON_PARTNER_TAG) {
       return 'Para links da Amazon, configure AMAZON_PARTNER_TAG (a nossa tag de afiliado) no .env.';
@@ -630,7 +640,7 @@ export function buildServer(): FastifyInstance {
       const channel = await prisma.channel.findUnique({ where: { id } });
       if (!channel) return reply.code(404).send({ ok: false, error: 'Canal não encontrado.' });
       const problem = sourceProblem(
-        { kind: body.kind!, stores: body.stores ?? [], chat: (body.telegramChat ?? '').trim(), linkTypes: body.linkTypes ?? [] },
+        { kind: body.kind!, stores: body.stores ?? [], chat: (body.telegramChat ?? '').trim(), linkTypes: body.linkTypes ?? [], postCoupons: body.postCoupons as boolean | undefined },
         channel.platform,
       );
       if (problem) return reply.code(400).send({ ok: false, error: problem });
@@ -652,7 +662,13 @@ export function buildServer(): FastifyInstance {
       const kind = body.kind ?? current.kind;
       const chat = (body.telegramChat ?? current.telegramChat ?? '').trim();
       const problem = sourceProblem(
-        { kind, stores: body.stores ?? current.stores, chat, linkTypes: body.linkTypes ?? current.linkTypes },
+        {
+          kind,
+          stores: body.stores ?? current.stores,
+          chat,
+          linkTypes: body.linkTypes ?? current.linkTypes,
+          postCoupons: (body.postCoupons as boolean | undefined) ?? current.postCoupons,
+        },
         current.channel.platform,
       );
       if (problem) return reply.code(400).send({ ok: false, error: problem });
@@ -673,6 +689,84 @@ export function buildServer(): FastifyInstance {
       return { ok: true, source: publicSource(source) };
     },
   );
+
+  // ---------- cupons coletados dos grupos de cupons (cofre/11) ----------
+  const COUPON_STATUSES = ['NEW', 'VALID', 'RESTRICTED', 'INVALID', 'EXPIRED'] as const;
+  const publicCoupon = <T extends { messageId: bigint | null }>(c: T) => ({ ...c, messageId: c.messageId?.toString() ?? null });
+
+  app.get(
+    '/api/coupons',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            status: { type: 'string', enum: [...COUPON_STATUSES] },
+            store: { type: 'string', enum: ['MERCADOLIVRE', 'AMAZON', 'SHOPEE', 'ALIEXPRESS'] },
+          },
+        },
+      },
+    },
+    async (req) => {
+      const { status, store } = req.query as { status?: string; store?: string };
+      const where = { ...(status ? { status } : {}), ...(store ? { store } : {}) };
+      const [coupons, counts] = await Promise.all([
+        prisma.coupon.findMany({
+          where,
+          orderBy: [{ lastSeenAt: 'desc' }],
+          take: 200,
+          include: { source: { select: { label: true, chatTitle: true, telegramChat: true, channel: { select: { name: true } } } } },
+        }),
+        prisma.coupon.groupBy({ by: ['status'], _count: true }),
+      ]);
+      return {
+        ok: true,
+        coupons: coupons.map(publicCoupon),
+        counts: Object.fromEntries(counts.map((c) => [c.status, c._count])),
+      };
+    },
+  );
+
+  // corrigir à mão: marcar válido/inválido e decidir se vai junto dos posts de produto
+  app.patch(
+    '/api/coupons/:id',
+    {
+      schema: {
+        params: idParams,
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: { status: { type: 'string', enum: ['VALID', 'INVALID'] }, attachable: { type: 'boolean' } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = req.body as { status?: 'VALID' | 'INVALID'; attachable?: boolean };
+      if (!(await prisma.coupon.findUnique({ where: { id }, select: { id: true } }))) {
+        return reply.code(404).send({ ok: false, error: 'Cupom não encontrado.' });
+      }
+      const coupon = await prisma.coupon.update({
+        where: { id },
+        data: { ...body, ...(body.status ? { statusDetail: `marcado ${body.status === 'VALID' ? 'válido' : 'inválido'} no painel` } : {}) },
+      });
+      await audit(req, 'coupon.update', id, `${coupon.store}:${coupon.code} ${JSON.stringify(body)}`);
+      return { ok: true, coupon: publicCoupon(coupon) };
+    },
+  );
+
+  // testar de novo na conta de afiliado (só Mercado Livre)
+  app.post('/api/coupons/:id/test', { schema: { params: idParams } }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const coupon = await prisma.coupon.findUnique({ where: { id }, select: { store: true, code: true } });
+    if (!coupon) return reply.code(404).send({ ok: false, error: 'Cupom não encontrado.' });
+    if (coupon.store !== 'MERCADOLIVRE') return reply.code(400).send({ ok: false, error: 'Teste automático só para cupons do Mercado Livre.' });
+    await mirrorQueue.add('coupon-test', { couponId: id }, { jobId: `coupon-test-${id}-${Date.now()}`, removeOnComplete: true, removeOnFail: 50 });
+    await audit(req, 'coupon.test', id, coupon.code);
+    return { ok: true };
+  });
 
   // histórico do espelhamento: o que chegou do grupo e o que virou (post, falha, ignorado)
   app.get('/api/sources/:id/events', { schema: { params: idParams } }, async (req, reply) => {

@@ -29,6 +29,7 @@
 | D23 | Fila por qualidade | A fila sai pela **nota** (agendado à mão = 100, vai primeiro); post automático que passa 24h sem sair expira. **Preço conferido na loja antes de postar** (AliExpress via API): subiu > 2% ou sumiu → cancela; mudou pouco/caiu → sai com o valor de agora. Sem limite de tamanho de fila | O risco não é fila grande, é oferta velha; conferir na hora resolve na raiz e deixa a fila crescer à vontade |
 | D24 | Espelhamento de grupo | Fonte `MIRROR` por canal: conta dedicada do Telegram **ouve** o grupo; 1º link `meli.la` de cada mensagem vai para o **linker** (serviço novo com navegador logado na conta de afiliado do ML) que pega o produto do card em destaque, gera o nosso link no gerador e posta com atraso 0–150 s da mensagem original. Falha → alerta no canal. Só Telegram, sem fila/ritmo, respeita silêncio, ignora repetido em 24h | Pedido do usuário; o ML não tem API de link de afiliado para isso, então é navegador. Dados do card (não da página do produto, que cai em verificação anti-robô sem login). Serviço separado para o Chromium não pesar/derrubar o worker |
 | D25 | Espelhamento Amazon | Tipo de link `AMAZON` no mesmo fluxo: resolvedor seguro → `/dp/ASIN` → `?tag=AMAZON_PARTNER_TAG` (troca a tag de quem postou), dados pela leitura da página com teto de 30/h. Link sem produto (Prime, lista) e teto → **ignorados sem alerta** (vale também para vitrine do ML) | Pedido do usuário ("só trocar a tag"); não precisa navegador. Alerta vermelho só para falha de verdade |
+| D26 | Grupo de cupons | Fonte `COUPONS` por canal: o mesmo ouvinte lê cupons (ML, Amazon, Shopee, AliExpress) e guarda em `Coupon`; ML é testado na conta de afiliado ("Inserir código": VALID/RESTRICTED/INVALID + condições de "Meus cupons"); outras lojas valem 24 h. Cupom **geral** e válido vai junto dos posts da loja (mínimo ≤ preço, maior desconto); opcional publicar os cupons no canal, espaçados, sem os links do grupo | Pedido do dono; teste no ML sem comprar nada (combinado que o cupom fica na conta); só cupom geral junto do produto para não prometer desconto que não vale |
 
 ## Log
 
@@ -131,6 +132,19 @@
   **15 min** nas duas fontes automáticas. Filtro de nicho passou a comparar **palavra a palavra com sinônimos**
   (gamer = jogos/gaming/e-sports; headset = fone; mouse = rato; controle = controlador/joystick): em 39 produtos reais dos
   termos de Games, 26 → 35 aceitos, e continuam recusados mouse/fone comuns, "jogo de panelas", "controle remoto de TV".
+- **2026-09-26** — espelhamento lê o **cupom** da mensagem (código em monoespaçado ou "Cupom: X"; cupom de página
+  "20% OFF") e põe no nosso post; só o código, nunca o texto de quem postou. 16 casos testados.
+- **2026-09-26** — espelhamento em rajada: o grupo mandou 6 ofertas de uma vez e saíram 6 posts em 1min40s. Agora há
+  **intervalo mínimo entre posts** (padrão 3 min + variação) contando o último post publicado ou reservado no canal;
+  `Post.sendAt` marca o horário reservado (a guarda de "envio travado" e o ritmo da fila respeitam). Oferta que só
+  sairia 45 min depois é ignorada.
+- **2026-09-26** — grupo de cupons (D26, nota [[11 - Grupo de Cupons]]). Leitor calibrado com 14 mensagens reais (16 cupons,
+  Zé Delivery ignorado; "em todo o site" = geral). Teste do ML na conta de afiliado: código inventado → inválido;
+  TODOSITE10 → válido e depois "já foi adicionado"; DECOR20 → "não se aplica a você". Achados: o "Inserir código" só abre
+  depois da página hidratar; aceitar o cupom navega para "Meus cupons" no meio da leitura; o card tem título + "Cupom
+  ativado de…", valores em linha separada e validade como cronômetro ("Encerra em 01:45:00"). Ponta a ponta com canal
+  falso: 3 cupons do ML válidos + 1 da Amazon agendados a cada ~35 s e enviados ("chat not found"); escolha do cupom junto
+  do post conferida (ML R$ 300 → TODOSITE10; R$ 50 → nenhum; Amazon R$ 150 → cupom; R$ 80 → nenhum).
 - **2026-09-26** — bot estava parado desde 2026-09-25 21:14 UTC (recebeu SIGTERM numa recriação e tinha `restart: "no"`).
   Não afetou posts (quem publica é o worker). Religado com `restart: on-failure` (sem token sai com 0 e não entra em loop).
 

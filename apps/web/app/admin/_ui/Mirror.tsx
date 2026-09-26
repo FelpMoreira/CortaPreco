@@ -34,6 +34,7 @@ export interface MirrorFields {
   linkTypes: string[];
   maxDelaySec: number;
   respectQuiet: boolean;
+  minGapSec: number;
 }
 
 export const fmtDelay = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
@@ -88,6 +89,21 @@ export function MirrorFormFields<T extends MirrorFields>({
           />
           <span className="muted" style={{ fontSize: 12 }}>
             Sorteado de 0 até {fmtDelay(d.maxDelaySec)} min, contado da mensagem original.
+          </span>
+        </label>
+        <label className="field">
+          <span>Intervalo mínimo entre posts (minutos)</span>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            max={60}
+            step={0.5}
+            value={d.minGapSec / 60}
+            onChange={(e) => setD({ ...d, minGapSec: Math.round(Number(e.target.value) * 60) })}
+          />
+          <span className="muted" style={{ fontSize: 12 }}>
+            Se o grupo mandar várias ofertas de uma vez, as nossas saem espaçadas (com um pouco de variação).
           </span>
         </label>
         <label className="row" style={{ gap: 10, cursor: 'pointer', flexWrap: 'nowrap', alignSelf: 'center' }}>
@@ -159,6 +175,7 @@ interface MirrorEvent {
   detail: string | null;
   affiliateUrl: string | null;
   productUrl: string | null;
+  coupon: string | null;
   createdAt: string;
   post: { status: string; postedAt: string | null; lastError: string | null } | null;
 }
@@ -198,6 +215,7 @@ function EventList({ sourceId, notify }: { sourceId: string; notify: Notify }) {
                 <code>{e.affiliateUrl}</code>
               </>
             )}
+            {e.coupon && <span> · 🎟 <strong>{e.coupon}</strong></span>}
             {e.detail && <span className="muted"> · {e.detail}</span>}
             {e.post && (
               <span className="muted">
@@ -287,7 +305,7 @@ export function MirrorCard({
               </span>
             ))}
             <span className="muted">
-              · atraso 0–{fmtDelay(s.maxDelaySec)} min
+              · atraso 0–{fmtDelay(s.maxDelaySec)} min · intervalo mín. {fmtDelay(s.minGapSec)} min
               {s.respectQuiet && quietHours ? ` · pausa no silêncio (${quietHours.replace('-', 'h–')}h)` : ''}
             </span>
           </span>
@@ -343,6 +361,202 @@ export function MirrorCard({
         {history ? <LuChevronDown size={13} /> : <LuChevronRight size={13} />} <LuHistory size={13} /> Últimas mensagens com link
       </button>
       {history && <EventList sourceId={s.id} notify={notify} />}
+    </div>
+  );
+}
+
+// ============================================================================================
+// Grupo de cupons (fonte COUPONS, cofre/11): observa um grupo só de cupons e guarda os cupons das
+// lojas escolhidas; opcionalmente publica os válidos neste canal.
+// ============================================================================================
+
+export const COUPON_STORES: [string, string][] = [
+  ['MERCADOLIVRE', 'Mercado Livre'],
+  ['AMAZON', 'Amazon'],
+  ['SHOPEE', 'Shopee'],
+  ['ALIEXPRESS', 'AliExpress'],
+];
+
+export interface CouponSourceFields {
+  telegramChat: string | null;
+  stores: string[];
+  postCoupons: boolean;
+  minGapSec: number;
+  respectQuiet: boolean;
+}
+
+export function CouponFormFields<T extends CouponSourceFields>({ d, setD }: { d: T; setD: (next: T) => void }) {
+  const toggle = (s: string) => setD({ ...d, stores: d.stores.includes(s) ? d.stores.filter((x) => x !== s) : [...d.stores, s] });
+  return (
+    <>
+      <label className="field">
+        <span>Grupo de cupons observado (@usuario, link t.me ou ID)</span>
+        <input
+          className="input"
+          value={d.telegramChat ?? ''}
+          onChange={(e) => setD({ ...d, telegramChat: e.target.value.trim().replace(/^https?:\/\/t\.me\//, '@') })}
+          placeholder="@grupodecupons"
+          required
+        />
+      </label>
+      <div className="field">
+        <span>Cupons de quais lojas</span>
+        <div className="chips">
+          {COUPON_STORES.map(([key, label]) => (
+            <button type="button" key={key} className="chip" aria-pressed={d.stores.includes(key)} onClick={() => toggle(key)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="muted" style={{ fontSize: 12 }}>
+          Mercado Livre é testado sozinho na conta de afiliado (o cupom válido fica na conta). As outras lojas valem 24 h ou até
+          alguém marcar &quot;não funciona&quot; em Cupons.
+        </span>
+      </div>
+      <div className="auto-box">
+        <label className="row" style={{ gap: 10, cursor: 'pointer', flexWrap: 'nowrap' }}>
+          <input type="checkbox" checked={d.postCoupons} onChange={(e) => setD({ ...d, postCoupons: e.target.checked })} />
+          <span>
+            <strong>Publicar os cupons neste canal</strong>
+            <span className="muted" style={{ display: 'block', fontSize: 13 }}>
+              Cada cupom novo e válido sai aqui com o nosso texto (código para copiar, mínimo, limite, validade), sem os links
+              do grupo. Desligado: os cupons só ficam guardados e vão junto dos posts de produto.
+            </span>
+          </span>
+        </label>
+        {d.postCoupons && (
+          <div className="grid cols-2" style={{ gap: 12 }}>
+            <label className="field">
+              <span>Intervalo mínimo entre cupons (minutos)</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                max={60}
+                step={0.5}
+                value={d.minGapSec / 60}
+                onChange={(e) => setD({ ...d, minGapSec: Math.round(Number(e.target.value) * 60) })}
+              />
+            </label>
+            <label className="row" style={{ gap: 10, cursor: 'pointer', flexWrap: 'nowrap', alignSelf: 'center' }}>
+              <input type="checkbox" checked={d.respectQuiet} onChange={(e) => setD({ ...d, respectQuiet: e.target.checked })} />
+              <span>De madrugada, guarda e publica quando o silêncio do canal acabar</span>
+            </label>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+export interface CouponSourceRow extends CouponSourceFields {
+  id: string;
+  label: string;
+  enabled: boolean;
+  chatTitle: string | null;
+  lastRunAt: string | null;
+  lastResult: string | null;
+  alert: string | null;
+  alertAt: string | null;
+  alertCount: number;
+}
+
+export function CouponSourceCard({
+  s,
+  presets,
+  canEdit,
+  notify,
+  onEdit,
+  onChanged,
+}: {
+  s: CouponSourceRow;
+  presets: MirrorPresets | null;
+  canEdit: boolean;
+  notify: Notify;
+  onEdit: () => void;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  async function patch(body: Record<string, unknown>, ok: string) {
+    setBusy(true);
+    try {
+      await adminFetch(`sources/${s.id}`, { method: 'PATCH', body });
+      notify('success', ok);
+      onChanged();
+    } catch (e) {
+      notify('error', (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function dismiss() {
+    try {
+      await adminFetch(`sources/${s.id}/dismiss-alert`, { method: 'POST' });
+      onChanged();
+    } catch (e) {
+      notify('error', (e as Error).message);
+    }
+  }
+  return (
+    <div className={`mirror-card${s.enabled ? '' : ' off'}`}>
+      <div className="spread" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
+        <div style={{ minWidth: 0, display: 'grid', gap: 4 }}>
+          <strong style={{ fontSize: 14 }}>🎟️ {s.label}</strong>
+          <span>
+            Coletando cupons de <strong>{s.chatTitle ?? s.telegramChat}</strong>
+          </span>
+          <span className="row" style={{ gap: 6 }}>
+            {s.stores.map((st) => (
+              <span key={st} className={`badge ${st}`}>
+                {COUPON_STORES.find(([k]) => k === st)?.[1] ?? st}
+              </span>
+            ))}
+            <span className="muted">
+              · {s.postCoupons ? `publica aqui (intervalo mín. ${fmtDelay(s.minGapSec)} min)` : 'só guarda (vai junto dos posts de produto)'}
+            </span>
+          </span>
+        </div>
+        <div className="row" style={{ flexWrap: 'nowrap', gap: 8 }}>
+          {canEdit && (
+            <button className="btn ghost sm" onClick={onEdit}>
+              Editar
+            </button>
+          )}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={s.enabled}
+            className="switch"
+            disabled={!canEdit || busy}
+            onClick={() => void patch({ enabled: !s.enabled }, s.enabled ? 'Coleta de cupons desligada.' : 'Coleta de cupons ligada.')}
+          >
+            <span className="switch-knob" />
+            <span className="switch-label">{s.enabled ? 'Ativo' : 'Desligado'}</span>
+          </button>
+        </div>
+      </div>
+      {presets && (
+        <div className="row" style={{ gap: 14 }}>
+          <HealthLine h={listenerHealth(s.id, s.enabled, presets)} />
+          {s.stores.includes('MERCADOLIVRE') && <HealthLine h={linkerHealth(presets, true)} />}
+        </div>
+      )}
+      {s.alert && (
+        <div className="alert-box" role="alert">
+          <LuTriangleAlert size={16} style={{ flex: 'none', marginTop: 1 }} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <strong>{s.alert}</strong>
+            <div className="muted" style={{ fontSize: 12 }}>
+              {s.alertAt ? fmtDate(s.alertAt) : ''}
+              {s.alertCount > 1 ? ` · ${s.alertCount} ocorrências` : ''}
+            </div>
+          </div>
+          <button className="btn ghost sm" onClick={() => void dismiss()}>
+            <LuBellOff size={13} /> Dispensar
+          </button>
+        </div>
+      )}
+      <span className="muted">{s.lastRunAt ? `Última: ${s.lastResult ?? '—'} (${fmtDate(s.lastRunAt)})` : 'Nenhum cupom coletado ainda.'} Veja todos em Catálogo → Cupons.</span>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq';
-import { inQuietHours, prisma, upsertProduct } from '@cupons/db';
+import { bestCouponFor, couponLine, inQuietHours, markCouponUsed, prisma, upsertProduct } from '@cupons/db';
 import { escapeHtml, LINK_PLACEHOLDER, renderMessageHtml } from '@cupons/shared';
 import { withPage } from './browser.js';
 import { config } from './config.js';
@@ -20,6 +20,23 @@ const publishQueue = new Queue('publish', { connection: { url: config.redisUrl }
 const MAX_LATE_MS = 10 * 60_000;
 /** O mesmo produto não sai de novo no mesmo canal dentro dessa janela (grupos repetem oferta). */
 const REPOST_WINDOW_MS = 24 * 3_600_000;
+/** Rajada grande do grupo: oferta que só sairia mais de 45 min depois do sorteio original é ignorada (velha). */
+const MAX_BACKLOG_MS = 45 * 60_000;
+
+/**
+ * Próximo horário livre no canal: depois do último post publicado e do último já reservado pelo espelhamento,
+ * + o intervalo mínimo (com até 30% a mais, para não ficar mecânico). Grupo que manda 5 de uma vez → 5 posts
+ * espaçados. O linker processa uma conversão por vez, então duas reservas nunca disputam o mesmo horário.
+ */
+async function nextSlot(channelId: string, wanted: Date, minGapSec: number): Promise<Date> {
+  const [reserved, posted] = await Promise.all([
+    prisma.post.findFirst({ where: { channelId, status: 'POSTING', sendAt: { not: null } }, orderBy: { sendAt: 'desc' }, select: { sendAt: true } }),
+    prisma.post.findFirst({ where: { channelId, status: 'POSTED' }, orderBy: { postedAt: 'desc' }, select: { postedAt: true } }),
+  ]);
+  const last = Math.max(reserved?.sendAt?.getTime() ?? 0, posted?.postedAt?.getTime() ?? 0);
+  const gap = minGapSec * 1000 * (1 + Math.random() * 0.3);
+  return new Date(Math.max(wanted.getTime(), last ? last + gap : 0, Date.now()));
+}
 
 const hhmm = (d: Date) => d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 
@@ -123,7 +140,12 @@ export async function processMirrorEvent(eventId: string): Promise<void> {
     return finish(eventId, 'SKIPPED', 'conversão terminou tarde demais (oferta velha)', { productUrl: p.productUrl, affiliateUrl });
   }
 
-  await createMirrorPost({ eventId, sourceId: source.id, channel, product: p, affiliateUrl, postAt });
+  // espaça do post anterior do canal (rajada do grupo não vira rajada nossa)
+  const slot = await nextSlot(channel.id, postAt, source.minGapSec);
+  if (slot.getTime() - postAt.getTime() > MAX_BACKLOG_MS) {
+    return finish(eventId, 'SKIPPED', `muitas ofertas do grupo de uma vez: esta só sairia às ${hhmm(slot)}`, { productUrl: p.productUrl, affiliateUrl });
+  }
+  await createMirrorPost({ eventId, sourceId: source.id, channel, product: p, affiliateUrl, postAt: slot, coupon: event.coupon });
 }
 
 /**
@@ -137,8 +159,14 @@ export async function createMirrorPost(args: {
   product: ConvertedProduct;
   affiliateUrl: string;
   postAt: Date;
+  /** cupom lido da mensagem do grupo (só o código/valor) */
+  coupon?: string | null;
 }): Promise<{ postId: string; when: Date }> {
   const { eventId, sourceId, channel, product: p, affiliateUrl, postAt } = args;
+  // cupom da própria mensagem; se não houver, o melhor cupom geral e válido da loja (grupo de cupons, cofre/11)
+  const best = args.coupon ? null : await bestCouponFor(p.store, p.price);
+  const coupon = args.coupon ?? (best ? couponLine(best) : null);
+  if (best) await markCouponUsed(best.id);
   const product = await upsertProduct({
     store: p.store,
     storeProductId: p.itemId,
@@ -147,7 +175,7 @@ export async function createMirrorPost(args: {
     price: p.price,
     oldPrice: p.oldPrice,
     discountPct: p.discountPct,
-    coupon: null,
+    coupon,
     imageUrl: p.imageUrl,
     category: null,
     rating: p.rating,
@@ -161,7 +189,7 @@ export async function createMirrorPost(args: {
     price: p.price,
     oldPrice: p.oldPrice,
     discountPct: p.discountPct,
-    coupon: null,
+    coupon,
     affiliateUrl: LINK_PLACEHOLDER,
   });
   const post = await prisma.$transaction(async (tx) => {
@@ -172,8 +200,9 @@ export async function createMirrorPost(args: {
         platform: channel.platform,
         message: template,
         affiliateUrl,
-        // POSTING: o scheduler não mexe; quem envia é o job atrasado abaixo
+        // POSTING com sendAt: o scheduler não mexe, a fila do canal respeita a reserva e o job atrasado envia
         status: 'POSTING',
+        sendAt: postAt,
         priority: 100,
         price: p.price,
       },

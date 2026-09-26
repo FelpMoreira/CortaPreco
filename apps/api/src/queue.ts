@@ -1,12 +1,15 @@
 import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
-import { MIRROR_STATUS_KEYS } from '@cupons/shared';
+import { MIRROR_QUEUE, MIRROR_STATUS_KEYS, type MirrorJob } from '@cupons/shared';
 import { config } from './config.js';
 
 /** Fila de curadoria: a API só enfileira; quem busca produtos e chama a IA é o worker. */
 export const curateQueue = new Queue('curate', { connection: { url: config.redisUrl } });
 
 export type CurateJob = { kind: 'urls'; urls: string[] } | { kind: 'discover' } | { kind: 'source'; sourceId: string };
+
+/** Fila do linker (conversões do espelhamento e testes de cupom do ML). */
+export const mirrorQueue = new Queue<MirrorJob>(MIRROR_QUEUE, { connection: { url: config.redisUrl } });
 
 /** Mesma fila de envio que o scheduler do worker usa. */
 export const publishQueue = new Queue('publish', { connection: { url: config.redisUrl } });

@@ -39,6 +39,9 @@ que injeta a chave (ver [[08 - Segurança]]).
 | POST | `/api/sources/:id/run` | — | DEV. Roda a fonte agora (400 para `MIRROR`: roda sozinho) |
 | GET | `/api/sources/:id/events` | — | últimas 30 mensagens do espelhamento (`status`, `detail`, links, post) |
 | POST | `/api/sources/:id/dismiss-alert` | — | limpa o alerta da fonte (qualquer perfil; auditado) |
+| GET | `/api/coupons` | `?status=NEW\|VALID\|RESTRICTED\|INVALID\|EXPIRED&store=MERCADOLIVRE\|AMAZON\|SHOPEE\|ALIEXPRESS` | `{ coupons (200), counts por status }` |
+| PATCH | `/api/coupons/:id` | `{ status?: VALID\|INVALID, attachable?: boolean }` | corrige à mão (auditado) |
+| POST | `/api/coupons/:id/test` | — | re-testa na conta de afiliado (só ML) |
 
 ## Mensagem
 

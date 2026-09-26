@@ -5,6 +5,7 @@
  *   npm run ml:check -- https://meli.la/abc --gerar    → também gera o link de afiliado (usa a sessão)
  *   npm run ml:check -- https://amzn.to/abc            → Amazon: URL limpa, NOSSO link (tag trocada) e dados da página
  *   npm run ml:check -- --sessao                       → só confere se a sessão do ML vale
+ *   npm run ml:check -- --cupom TODOSITE10             → testa um cupom do ML (válido = fica na conta de afiliado)
  *
  * No Docker: docker compose exec linker npm run ml:check -w @cupons/linker -- https://meli.la/abc
  */
@@ -17,7 +18,12 @@ import { checkMlSession, ConversionError, generateAffiliateLink, resolveProduct 
 const args = process.argv.slice(2);
 const link = args.find((a) => /^https?:\/\//.test(a));
 try {
-  if (args.includes('--sessao')) {
+  if (args.includes('--cupom')) {
+    const code = args[args.indexOf('--cupom') + 1]?.toUpperCase();
+    if (!code) throw new Error('informe o código: --cupom CODIGO');
+    const { testMlCode } = await import('../src/couponTest.js');
+    console.log(JSON.stringify(await testMlCode(code), null, 2));
+  } else if (args.includes('--sessao')) {
     console.log(`arquivo de sessão: ${hasMlSession() ? 'existe' : 'NÃO existe (rode npm run ml:login)'}`);
     if (hasMlSession()) console.log('sessão:', await withPage({ session: true }, (page) => checkMlSession(page)));
   } else if (link && mirrorLinkType(link) === 'AMAZON') {
@@ -40,4 +46,6 @@ try {
   process.exitCode = 1;
 } finally {
   await closeBrowser();
+  // as filas (Redis) importadas pelo teste de cupom mantêm o processo vivo: encerra explicitamente
+  process.exit(process.exitCode ?? 0);
 }

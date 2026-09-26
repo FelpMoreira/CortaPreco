@@ -93,3 +93,34 @@ export function renderMessageHtml(input: MessageInput): string {
 export function formatBRL(v: number): string {
   return brl(v);
 }
+/** Dados de um cupom para o post do canal de cupons (cofre/11). */
+export interface CouponMessageInput {
+  store: Store;
+  code: string;
+  title: string;
+  minPurchase: number | null;
+  maxDiscount: number | null;
+  scope: string | null;
+  expiresAt: Date | null;
+}
+
+/**
+ * Post de cupom: código em monoespaçado (no Telegram, toque = copiar). Sem link de terceiros: os links
+ * que vêm no grupo de cupons são do afiliado que postou (a comissão iria para ele).
+ */
+export function renderCouponHtml(c: CouponMessageInput): string {
+  const store = STORE_LABELS[c.store].toUpperCase();
+  const lines = [`🎟️ <b>CUPOM ${store}</b>`, '', `<b>${er(c.title)}</b>`, `Código: <code>${er(c.code)}</code>`];
+  const conds: string[] = [];
+  if (c.minPurchase && c.minPurchase > 1) conds.push(`compra mínima ${brl(c.minPurchase)}`);
+  if (c.maxDiscount) conds.push(`desconto até ${brl(c.maxDiscount)}`);
+  if (conds.length) lines.push(conds.join(' · ').replace(/^./, (x) => x.toUpperCase()));
+  if (c.scope) lines.push(`Vale em: ${er(c.scope)}`);
+  if (c.expiresAt) {
+    const when = c.expiresAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    lines.push(`⏰ Válido até ${when.replace(',', ' às')}`);
+  }
+  lines.push('', `Use no carrinho ou no app ${c.store === 'SHOPEE' || c.store === 'AMAZON' ? 'da' : 'do'} ${STORE_LABELS[c.store]}.`);
+  lines.push('', '📌 Anúncio | Cupons podem acabar a qualquer momento');
+  return lines.join('\n');
+}

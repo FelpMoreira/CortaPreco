@@ -55,6 +55,9 @@ model Post {
   price              Decimal? @db.Decimal(10, 2)
   /// Falhas seguidas ao conferir o preço (API fora do ar); desiste na 3ª
   checkErrors        Int      @default(0)
+  /// Espelhamento: horário reservado do envio (job atrasado). POSTING com sendAt no futuro = esperando a vez,
+  /// não "enviando" (não trava a fila nem vira "Envio interrompido").
+  sendAt             DateTime?
   telegramMessageId  Int?
   lastError          String?
   postedAt           DateTime?
@@ -204,7 +207,7 @@ model ChannelSource {
   id            String    @id @default(cuid())
   channel       Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
   channelId     String
-  kind          String    // API | TELEGRAM | MIRROR (espelha um grupo do Telegram, ver cofre/10)
+  kind          String    // API | TELEGRAM | MIRROR (espelha grupo, cofre/10) | COUPONS (coleta cupons de um grupo, cofre/11)
   label         String
   enabled       Boolean   @default(true)
   stores        String[]  @default([]) // API: ALIEXPRESS, SHOPEE, AMAZON
@@ -220,6 +223,10 @@ model ChannelSource {
   maxDelaySec   Int       @default(150)
   /// MIRROR: não posta durante o silêncio de madrugada do canal
   respectQuiet  Boolean   @default(true)
+  /// MIRROR/COUPONS: intervalo mínimo entre posts no canal (grupo manda 5 de uma vez → saem espaçados)
+  minGapSec     Int       @default(180)
+  /// COUPONS: publica cada cupom novo (válido) neste canal; desligado = só guarda no painel
+  postCoupons   Boolean   @default(false)
   /// Alerta para o painel (ex.: conversão do link falhou). Fica até alguém dispensar.
   alert         String?
   alertAt       DateTime?
@@ -241,6 +248,7 @@ model ChannelSource {
   suggestions   Suggestion[]
   seenLinks     SeenLink[]
   events        SourceEvent[]
+  coupons       Coupon[]
 
   @@index([channelId])
 }
@@ -257,6 +265,8 @@ model SourceEvent {
   /// URL do produto sem query/hash e o nosso link de afiliado gerado
   productUrl   String?
   affiliateUrl String?
+  /// cupom lido da mensagem (código em monoespaçado/"Cupom: X" ou cupom de página "20% OFF"); vai no nosso post
+  coupon       String?
   /// PENDING (na fila do conversor) | CONVERTED (post criado) | FAILED | SKIPPED
   status       String        @default("PENDING")
   detail       String?
@@ -286,3 +296,47 @@ model SeenLink {
 
   @@index([sourceId, status])
 }
+
+// Cupom coletado de um grupo de cupons (cofre/11). Um por loja+código; visto de novo → atualiza.
+model Coupon {
+  id            String         @id @default(cuid())
+  /// MERCADOLIVRE | AMAZON | SHOPEE | ALIEXPRESS
+  store         String
+  code          String
+  /// resumo nosso ("15% OFF acima de R$ 799 (máx. R$ 130)") ou o título do ML ao validar ("10% OFF TODO O SITE")
+  title         String
+  discountPct   Int?
+  discountValue Decimal?       @db.Decimal(10, 2)
+  minPurchase   Decimal?       @db.Decimal(10, 2)
+  maxDiscount   Decimal?       @db.Decimal(10, 2)
+  /// parte da loja em que vale ("Decoração & Eletros", "Em produtos de X")
+  scope         String?
+  /// vale para a loja toda → pode ir junto dos posts de produto da loja (ajustável no painel)
+  attachable    Boolean        @default(false)
+  /// NEW (ainda não testado) | VALID | RESTRICTED ("não se aplica a você") | INVALID | EXPIRED
+  status        String         @default("NEW")
+  statusDetail  String?
+  checkedAt     DateTime?
+  expiresAt     DateTime?
+  /// link que veio com o cupom (é do afiliado que postou: só referência no painel, NUNCA vai para os nossos posts)
+  sourceLink    String?
+  source        ChannelSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  sourceId      String?
+  messageId     BigInt?
+  seenCount     Int            @default(1)
+  firstSeenAt   DateTime       @default(now())
+  lastSeenAt    DateTime       @default(now())
+  /// publicação no canal de cupons: horário reservado e quando saiu
+  postAt        DateTime?
+  postedAt      DateTime?
+  postError     String?
+  /// quantos posts de produto levaram este cupom
+  usedInPosts   Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([store, code])
+  @@index([status, store])
+  @@index([expiresAt])
+}
+

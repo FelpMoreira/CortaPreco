@@ -79,7 +79,8 @@ No SaaS: credenciais e providers por tenant, mesma pipeline.
 |------|----------|--------------|----------|
 | `publish` | scheduler, "postar agora", linker (com `delay`) | worker `worker.ts` | enviar um post (confere o preço antes, D23) |
 | `curate` | API (lote, descoberta, fonte "rodar agora"), `sources-tick` a cada 2 min | worker `curation.ts` | buscar produtos e criar sugestões |
-| `mirror` | worker `mirror.ts` (mensagem do grupo com `meli.la`) | linker | converter o link no navegador e agendar o post |
+| `mirror` | worker `mirror.ts` (mensagem com `meli.la`/`amzn.to`) e worker `coupons.ts`/API (teste de cupom) | linker | converter o link ou testar o cupom do ML e agendar |
+| `coupon-post` | worker `coupons.ts`, linker (cupom ML válido) | worker `coupons.ts` | publicar cupons no canal de cupons, espaçados |
 
 ## Espelhamento (resumo)
 

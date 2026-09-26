@@ -75,6 +75,8 @@
 | Que link | só host `meli.la` (e subdomínios) | pedido; é o encurtador de afiliado do ML. `mercadolivre.com.br/...` direto é ignorado (dá para ligar depois) |
 | Mais de um link na mensagem | vale **o primeiro** `meli.la` | 1 mensagem do grupo = no máximo 1 post nosso |
 | Atraso | sorteado 0…`maxDelaySec`, **contado da hora da mensagem original** | pedido (0–2min30s). Se a conversão demorar mais que o sorteio, posta assim que terminar |
+| Intervalo entre posts | `minGapSec` (padrão **3 min**, +0–30% de variação) depois do último post publicado **ou reservado** no canal | 2026-09-26: o grupo mandou 6 ofertas às 09:18:10 e saíram 6 posts entre 09:18:40 e 09:20:18 — rajada. Agora saem espaçadas |
+| Rajada grande | oferta que só sairia > 45 min depois do sorteio → ignorada ("muitas ofertas do grupo de uma vez") | oferta velha; evita horas de fila atrás de um grupo muito ativo |
 | Mensagem velha | > 10 min quando vista → ignorada | worker parado / conferência atrasada não despeja oferta velha |
 | Conversão tardia | terminou > 10 min depois do `postAt` → ignora | idem |
 | Ao ligar/religar | começa da **próxima** mensagem | não espelha o histórico do grupo |
@@ -231,13 +233,40 @@ Painel: tipo "Amazon" nos chips (fluxo novo já vem com ML + Amazon se a tag exi
 "Amazon: tag de afiliado configurada / falta AMAZON_PARTNER_TAG". A API recusa fluxo com Amazon sem a tag.
 Diagnóstico: `docker compose exec linker npm run ml:check -w @cupons/linker -- https://amzn.to/XXXX` (sem postar).
 
-Testes (2026-09-26): 5 `amzn.to` reais de grupos públicos → 4 produtos (tag `co.wpp-reduz-20` de quem postou trocada pela
+Testes (2026-09-26): 5 `amzn.to` reais de grupos públicos → 4 produtos (tag de afiliado de quem postou trocada pela
 nossa; título/preço/imagem lidos) + 1 link do Prime (ignorado). Dentro do container: a tag do link gerado é **igual** à
 `AMAZON_PARTNER_TAG` do `.env`. Detecção (9 casos). Ponta a ponta com canal falso: evento → post "ACHADO NA AMAZON"
 R$ 30,89 com a nossa tag → envio disparou → "chat not found" (nada publicado); link do Prime → `SKIPPED` sem alerta.
 
 Riscos: ler a página da Amazon com robô vai contra as Condições de Uso do Associados (D15) — teto baixo mitiga, mas o
 caminho oficial é a Creators API (exige 10 vendas/30 dias). Preço lido pode ficar velho até o post sair (≤ 2min30s).
+
+## Cupom da mensagem (2026-09-26)
+
+Pedido: "ler a mensagem toda; se tiver cupom na mensagem, informar também". O ouvinte lê o texto inteiro e as
+entidades da mensagem e guarda em `SourceEvent.coupon` **só o código** (ou o valor do cupom de página); o linker põe no
+nosso post a linha `🎟️ Cupom: <código>` do template (e em `Product.coupon`). O texto de quem postou continua fora.
+
+Detector: `extractCoupon` em `packages/shared/src/coupons.ts`, calibrado com mensagens reais de canais públicos:
+1. **Monoespaçado** (entidade `code`/`pre` do Telegram, o "toque para copiar") numa mensagem que fala de cupom/código —
+   é como os grupos publicam: `🎟 Use o cupom: TECH200`, `🎟 Cupom: BATEUAQUI`, `Use o Cupom no aplicativo: CUPOMGRANADO`.
+2. Sem monoespaçado: só em forma de instrução e em MAIÚSCULAS no original — `Cupom: MELI15`, `use o cupom DECOR20`.
+   Título caixa-alta ("CUPOM ESPORTES!!!") e "use o cupom abaixo" não viram código.
+3. Cupom de página sem código: "Cupom de 20% para resgatar…", "cupom de R$ 30" → `20% OFF (resgate na página)`.
+- Até 2 códigos no post ("APROVEITAHOJE ou MODA10"); código só de números é recusado (preço/quantidade);
+  palavras como ABAIXO, AQUI, APP, OFF, nomes de loja não são código.
+- Testes: 16 casos (os reais acima + negativos: modelo de produto em monoespaçado, preço, título sem código).
+- O histórico do fluxo no painel mostra `🎟 <cupom>` em cada mensagem convertida.
+
+## Espaçamento e horário reservado (2026-09-26)
+
+- O linker calcula o horário (`nextSlot` em `apps/linker/src/mirror.ts`): `max(sorteio, último POSTED do canal, último
+  POSTING reservado) + minGapSec × (1…1,3)`. Uma conversão por vez → reservas nunca colidem.
+- O post nasce `POSTING` com **`Post.sendAt`** = horário reservado e um job atrasado na fila `publish`.
+- `sendAt` no futuro = **esperando a vez**, não enviando: `channelPacing` não trata como "enviando" (a fila normal do
+  canal continua andando), mas não encosta nele — reserva a menos de 3 min → o próximo da fila espera ela sair + 3 min.
+- A guarda "Envio interrompido (POSTING > 15 min)" do scheduler ignora posts cujo `sendAt` ainda não passou de 15 min.
+- Painel: campo "Intervalo mínimo entre posts (minutos)" no formulário; o card mostra "intervalo mín. 3:00 min".
 
 ## Riscos
 

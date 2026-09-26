@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { escapeHtml, LINK_PLACEHOLDER, renderMessageHtml, telegramHtmlToWhatsApp, type Store } from '@cupons/shared';
 import { ProviderRegistry } from '@cupons/affiliates';
-import { dailyCap, prisma, recordPrice, upsertProduct, type Product as PrismaProduct } from '@cupons/db';
+import { bestCouponFor, couponLine, dailyCap, markCouponUsed, prisma, recordPrice, upsertProduct, type Product as PrismaProduct } from '@cupons/db';
 import { sanitizeHook } from '@cupons/curator';
 import { config } from '../config.js';
 import { enqueuePublish } from '../queue.js';
@@ -16,14 +16,24 @@ export async function createProductFromUrl(rawUrl: string): Promise<PrismaProduc
   return upsertProduct({ ...data, store: provider.store, url });
 }
 
+/**
+ * Cupom que vai junto do post: o do próprio produto (preenchido no editor) ou o melhor cupom geral e válido
+ * da loja coletado do grupo de cupons (cofre/11).
+ */
+export async function couponForPost(product: PrismaProduct): Promise<{ line: string; couponId: string | null } | null> {
+  if (product.coupon) return { line: product.coupon, couponId: null };
+  const best = await bestCouponFor(product.store, Number(product.price));
+  return best ? { line: couponLine(best), couponId: best.id } : null;
+}
+
 /** Mensagem padrão do produto, com o marcador no lugar do link (e a frase da curadoria, se houver). */
-export function defaultMessage(product: PrismaProduct, hook?: string | null): string {
+export function defaultMessage(product: PrismaProduct, hook?: string | null, coupon?: string | null): string {
   return renderMessageHtml({
     store: product.store as Store,
     title: product.title,
     price: Number(product.price),
     oldPrice: product.oldPrice ? Number(product.oldPrice) : null,
-    coupon: product.coupon,
+    coupon: coupon ?? product.coupon,
     discountPct: product.discountPct,
     affiliateUrl: LINK_PLACEHOLDER,
     hook,
@@ -214,7 +224,10 @@ export async function schedulePostForProduct(
   });
   const todo = channels.filter((c) => !pending.some((p) => p.channelId === c.id));
 
-  let template = opts?.messageOverride?.trim() || defaultMessage(product, opts?.hook);
+  // mensagem editada no painel já traz o cupom que a pessoa quis; a gerada leva o melhor cupom da loja
+  const coupon = opts?.messageOverride?.trim() ? null : await couponForPost(product);
+  let template = opts?.messageOverride?.trim() || defaultMessage(product, opts?.hook, coupon?.line);
+  if (coupon?.couponId) await markCouponUsed(coupon.couponId);
   if (!template.includes(LINK_PLACEHOLDER)) template += `\n\n🛒 ${LINK_PLACEHOLDER}`;
 
   const provider = registry.providerFor(product.url);

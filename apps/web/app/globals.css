@@ -1316,3 +1316,35 @@ img.pthumb {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+/* ---------- cupons ---------- */
+.coupon-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+}
+.coupon-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.coupon-card.off {
+  opacity: 0.6;
+}
+.coupon-code {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg-hover);
+  color: var(--text);
+  font: 600 15px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.coupon-code:hover {
+  border-color: var(--accent);
+}

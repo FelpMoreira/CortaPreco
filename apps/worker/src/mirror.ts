@@ -6,6 +6,7 @@ import { NewMessage, type NewMessageEvent } from 'telegram/events/index.js';
 import { getPeerId } from 'telegram/Utils.js';
 import { prisma } from '@cupons/db';
 import {
+  extractCoupon,
   MIRROR_LINK_TYPE_KEYS,
   MIRROR_QUEUE,
   MIRROR_STATUS_KEYS,
@@ -14,6 +15,7 @@ import {
   type MirrorLinkType,
 } from '@cupons/shared';
 import { config } from './config.js';
+import { collectCoupons } from './coupons.js';
 import { extractLinks, type MessageLike } from './telegramLinks.js';
 import { entityById, getClient, readerConfigured, whenClientCreated } from './telegramReader.js';
 
@@ -34,10 +36,14 @@ const SEEN_TTL_SEC = 3 * 24 * 3600;
 
 interface Watched {
   sourceId: string;
+  /** MIRROR (espelha ofertas) ou COUPONS (coleta cupons, cofre/11) */
+  kind: 'MIRROR' | 'COUPONS';
   chat: string;
   input: unknown;
   linkTypes: MirrorLinkType[];
   maxDelaySec: number;
+  /** COUPONS: lojas cujos cupons interessam */
+  stores: string[];
 }
 
 /** id marcado do chat (ex.: -1001234567890) → fontes que o observam (um grupo pode alimentar vários canais). */
@@ -84,12 +90,24 @@ async function handleMessage(w: Watched, msg: TgMessage): Promise<void> {
 
   if (Date.now() - msg.date * 1000 > MAX_MESSAGE_AGE_MS) return;
 
+  if (w.kind === 'COUPONS') {
+    await collectCoupons({ sourceId: w.sourceId, stores: w.stores }, msg, mirrorQueue);
+    return;
+  }
+
   // só o PRIMEIRO link tratável da mensagem: uma mensagem do grupo = no máximo um post nosso
   const link = extractLinks(msg).find((l) => {
     const type = mirrorLinkType(l);
     return type !== null && w.linkTypes.includes(type);
   });
   if (!link) return;
+
+  // cupom da mensagem inteira: código em monoespaçado ("toque para copiar") ou "Cupom: X"; só o código vai para o post
+  const text = msg.message ?? '';
+  const codeSpans = (msg.entities ?? [])
+    .filter((e) => (e.className === 'MessageEntityCode' || e.className === 'MessageEntityPre') && e.offset !== undefined && e.length)
+    .map((e) => text.slice(e.offset!, e.offset! + e.length!));
+  const coupon = extractCoupon({ text, codeSpans }).display;
 
   // atraso aleatório de 0 a maxDelaySec, contado da mensagem ORIGINAL (não de quando a vimos)
   const postAt = new Date(msg.date * 1000 + randomInt(0, w.maxDelaySec * 1000 + 1));
@@ -100,11 +118,12 @@ async function handleMessage(w: Watched, msg: TgMessage): Promise<void> {
       link,
       linkType: mirrorLinkType(link)!,
       postAt,
+      coupon,
     },
   });
   await mirrorQueue.add('convert', { eventId: event.id }, { jobId: `mirror-${event.id}`, removeOnComplete: true, removeOnFail: 200 });
   await prisma.channelSource.update({ where: { id: w.sourceId }, data: { lastRunAt: new Date() } });
-  console.log(`[espelho] ${w.chat} msg ${msg.id}: ${link} → conversão (post às ${postAt.toISOString()})`);
+  console.log(`[espelho] ${w.chat} msg ${msg.id}: ${link}${coupon ? ` + cupom ${coupon}` : ''} → conversão (post às ${postAt.toISOString()})`);
 }
 
 /** Alerta no painel só quando muda (não incrementa o contador a cada minuto com o mesmo problema). */
@@ -117,8 +136,8 @@ async function raiseAlert(sourceId: string, text: string): Promise<void> {
 
 async function refresh(): Promise<void> {
   const sources = await prisma.channelSource.findMany({
-    where: { kind: 'MIRROR', enabled: true, channel: { enabled: true } },
-    select: { id: true, telegramChat: true, chatTitle: true, linkTypes: true, maxDelaySec: true, lastMessageId: true },
+    where: { kind: { in: ['MIRROR', 'COUPONS'] }, enabled: true, channel: { enabled: true } },
+    select: { id: true, kind: true, telegramChat: true, chatTitle: true, linkTypes: true, maxDelaySec: true, stores: true, lastMessageId: true },
   });
   if (sources.length === 0) {
     watched = new Map();
@@ -149,6 +168,8 @@ async function refresh(): Promise<void> {
 
       const w: Watched = {
         sourceId: s.id,
+        kind: s.kind === 'COUPONS' ? 'COUPONS' : 'MIRROR',
+        stores: s.stores,
         chat,
         input: r.input,
         linkTypes: s.linkTypes.filter((t): t is MirrorLinkType => (MIRROR_LINK_TYPE_KEYS as string[]).includes(t)),

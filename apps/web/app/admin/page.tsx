@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { LuRadioTower, LuChartColumn, LuKeyRound, LuLayoutDashboard, LuListOrdered, LuPackage, LuPlus, LuScrollText, LuSend, LuSparkles, LuUserRound, LuUsers } from 'react-icons/lu';
+import { LuRadioTower, LuChartColumn, LuKeyRound, LuLayoutDashboard, LuListOrdered, LuPackage, LuTicketPercent, LuPlus, LuScrollText, LuSend, LuSparkles, LuUserRound, LuUsers } from 'react-icons/lu';
 import { AccountTab, PasswordForm } from './_ui/Account';
 import { AuditTab } from './_ui/Audit';
 import { ChannelsTab } from './_ui/Channels';
@@ -10,13 +10,14 @@ import { UsersTab } from './_ui/Users';
 import { OfferEditor } from './_ui/OfferEditor';
 import { OverviewTab } from './_ui/Overview';
 import { QueuesTab } from './_ui/Queues';
+import { CouponsTab } from './_ui/Coupons';
 import { Shell } from './_ui/Shell';
 import { SuggestionsTab } from './_ui/Suggestions';
 import { MetricsTab, PostsTab, ProductsTab } from './_ui/Tabs';
 import { PageHeader, QueueBanner, type ChannelOverview } from './_ui/ui';
 
-type Tab = 'visao' | 'sugestoes' | 'nova' | 'filas' | 'posts' | 'produtos' | 'metricas' | 'canais' | 'conta' | 'usuarios' | 'auditoria';
-const TABS: Tab[] = ['visao', 'sugestoes', 'nova', 'filas', 'posts', 'produtos', 'metricas', 'canais', 'conta', 'usuarios', 'auditoria'];
+type Tab = 'visao' | 'sugestoes' | 'nova' | 'filas' | 'posts' | 'cupons' | 'produtos' | 'metricas' | 'canais' | 'conta' | 'usuarios' | 'auditoria';
+const TABS: Tab[] = ['visao', 'sugestoes', 'nova', 'filas', 'posts', 'cupons', 'produtos', 'metricas', 'canais', 'conta', 'usuarios', 'auditoria'];
 const DEV_ONLY: Tab[] = ['usuarios', 'auditoria'];
 
 const TITLES: Record<Tab, string> = {
@@ -25,6 +26,7 @@ const TITLES: Record<Tab, string> = {
   nova: 'Nova oferta',
   filas: 'Filas',
   posts: 'Posts',
+  cupons: 'Cupons',
   produtos: 'Produtos',
   metricas: 'Métricas',
   canais: 'Canais',
@@ -108,6 +110,7 @@ export default function AdminDashboard() {
       title: 'Catálogo',
       items: [
         { id: 'produtos' as const, label: 'Produtos', icon: <LuPackage size={18} /> },
+        { id: 'cupons' as const, label: 'Cupons', icon: <LuTicketPercent size={18} /> },
         { id: 'metricas' as const, label: 'Métricas', icon: <LuChartColumn size={18} /> },
       ],
     },
@@ -161,6 +164,7 @@ export default function AdminDashboard() {
       {tab === 'auditoria' && me?.role === 'DEV' && <AuditTab notify={notify} />}
       {tab === 'visao' && <OverviewTab notify={notify} onGo={go} />}
       {tab === 'filas' && <QueuesTab notify={notify} />}
+      {tab === 'cupons' && <CouponsTab notify={notify} />}
 
       {tab === 'sugestoes' && (
         <>

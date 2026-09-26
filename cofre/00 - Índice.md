@@ -29,7 +29,8 @@ Repo: `FelpMoreira/CortaPreco` · pasta local `cupons/`.
 | 07 | [[07 - Operação]] | Rodar, deploy, problemas comuns |
 | 08 | [[08 - Segurança]] | Controles e checklist de lançamento |
 | 09 | [[09 - API]] | Contrato das rotas |
-| 10 | [[10 - Espelhamento Mercado Livre]] | Observar grupo do Telegram e repostar ofertas do ML com o nosso link |
+| 10 | [[10 - Espelhamento Mercado Livre]] | Observar grupo do Telegram e repostar ofertas (ML e Amazon) com o nosso link |
+| 11 | [[11 - Grupo de Cupons]] | Coletar cupons de um grupo, testar os do ML, usar junto dos posts e publicar num canal |
 
 ## Regras do cofre
 

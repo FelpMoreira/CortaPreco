@@ -25,6 +25,9 @@ const ALLOWED: [method: string, path: RegExp][] = [
   ['POST', new RegExp(`^sources/${ID}/run$`)],
   ['GET', new RegExp(`^sources/${ID}/events$`)],
   ['POST', new RegExp(`^sources/${ID}/dismiss-alert$`)],
+  ['GET', /^coupons$/],
+  ['PATCH', new RegExp(`^coupons/${ID}$`)],
+  ['POST', new RegExp(`^coupons/${ID}/test$`)],
   // conta e sessões do próprio usuário
   ['GET', /^auth\/me$/],
   ['POST', /^auth\/password$/],

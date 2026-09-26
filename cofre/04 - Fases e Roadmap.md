@@ -46,9 +46,13 @@
 - [x] Espelhamento de grupo do Telegram com conversão de links do Mercado Livre (D24, [[10 - Espelhamento Mercado Livre]])
 - [x] Espelhamento: `npm run ml:login` na conta de afiliado e validar o gerador de links logado (1ª conversão real, 2026-09-26)
 - [ ] Validar a identidade na conta de afiliado do ML (prazo ~2026-12-31, senão a conta é suspensa)
-- [x] Espelhamento ligado num grupo real (OQMDV-PROMO → Games, 2026-09-26)
+- [x] Espelhamento ligado em grupos reais (2026-09-26)
 - [ ] Espelhamento: acompanhar alertas/histórico na 1ª semana
 - [x] Espelhamento também para links da Amazon (troca de tag, D25)
+- [x] Espelhamento lê o cupom da mensagem e espaça posts de rajadas (2026-09-26)
+- [x] Grupo de cupons: coleta, teste ML, cupom junto dos posts, canal de cupons (D26, [[11 - Grupo de Cupons]])
+- [ ] Ligar o grupo de cupons real e criar o canal só de cupons
+- [ ] Coletar cupons direto da página "Todos os cupons" do ML (~2.800) — ideia
 - [ ] Escolher provedor de IA (comparar custo) e ligar
 - [ ] Aprovação pelo privado do bot no Telegram (botões)
 - [x] Modo automático (sem aprovação) por fonte, com nota mínima (D22)

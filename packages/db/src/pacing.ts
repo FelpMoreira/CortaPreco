@@ -36,6 +36,9 @@ export function minGapMs(channel: Pick<Channel, 'postsPerHour' | 'jitterPct'>, l
   return base * (1 + (unit * channel.jitterPct) / 100);
 }
 
+/** Folga entre um post da fila e um post do espelhamento com horário reservado. */
+const RESERVE_MARGIN_MS = 3 * 60_000;
+
 export type WaitReason = 'ready' | 'empty' | 'sending' | 'gap' | 'hourly' | 'daily' | 'quiet';
 
 export interface ChannelPacing {
@@ -57,8 +60,15 @@ export interface ChannelPacing {
  */
 export async function channelPacing(channel: Channel, now = Date.now()): Promise<ChannelPacing> {
   const where = { channelId: channel.id };
-  const [inFlight, scheduled, recent] = await Promise.all([
-    prisma.post.count({ where: { ...where, status: 'POSTING' } }),
+  const [inFlight, reserved, scheduled, recent] = await Promise.all([
+    // enviando de fato: POSTING sem horário reservado ou com o horário já chegado
+    prisma.post.count({ where: { ...where, status: 'POSTING', OR: [{ sendAt: null }, { sendAt: { lte: new Date(now) } }] } }),
+    // espelhamento esperando a vez (job atrasado): reserva um horário no canal
+    prisma.post.findMany({
+      where: { ...where, status: 'POSTING', sendAt: { gt: new Date(now) } },
+      orderBy: { sendAt: 'asc' },
+      select: { sendAt: true },
+    }),
     prisma.post.count({ where: { ...where, status: 'SCHEDULED' } }),
     prisma.post.findMany({
       where: { ...where, status: 'POSTED', postedAt: { gte: new Date(now - 24 * HOUR) } },
@@ -82,6 +92,9 @@ export async function channelPacing(channel: Channel, now = Date.now()): Promise
   // cada restrição dá um "a partir de quando"; vale a mais tardia
   const limits: [WaitReason, number][] = [];
   if (last) limits.push(['gap', last.postedAt!.getTime() + minGapMs(channel, last.id)]);
+  // não encosta num post do espelhamento já reservado: reserva a menos de 3 min → espera ela sair + 3 min
+  const nearReserve = reserved.find((r) => r.sendAt!.getTime() - now < RESERVE_MARGIN_MS);
+  if (nearReserve) limits.push(['sending', nearReserve.sendAt!.getTime() + RESERVE_MARGIN_MS]);
   if (lastHour.length >= channel.postsPerHour) {
     // libera quando o post que estourou o limite sair da janela de 1h
     limits.push(['hourly', lastHour[lastHour.length - channel.postsPerHour]!.postedAt!.getTime() + HOUR]);
