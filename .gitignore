@@ -20,3 +20,6 @@ backups/
 
 # sessão do Mercado Livre (cookies = acesso à conta) e prints de falha do linker
 data/
+
+# dumps do banco (dados reais: não versionar)
+Backup-banco/
