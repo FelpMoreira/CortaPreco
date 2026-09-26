@@ -9,7 +9,7 @@ que injeta a chave (ver [[08 - Segurança]]).
 | Método | Rota | O que faz |
 |--------|------|-----------|
 | GET | `/api/health` | `{ ok: true }` |
-| GET | `/api/public/catalog` | Últimos 60 posts publicados + `base` do redirector |
+| GET | `/api/public/catalog` | `?page=1…&store=SHOPEE\|ALIEXPRESS\|AMAZON\|MERCADOLIVRE`: 24 por página, um card por loja+título (post mais recente); devolve `page`, `pages`, `total`, `featured` (destaque do topo), `stats`, `base` do redirector |
 | GET | `/c/:postId` | Registra clique (post POSTED, sem robô) e 302 para o link de afiliado; 404 se não existe/cancelado |
 
 ## Admin
@@ -37,6 +37,7 @@ que injeta a chave (ver [[08 - Segurança]]).
 | POST | `/api/channels/:id/sources` | `kind` `API`\|`TELEGRAM`\|`MIRROR` + campos | DEV. `MIRROR` exige `telegramChat` e `linkTypes` (`MERCADOLIVRE`); só canal Telegram; `maxDelaySec` 0–600, `respectQuiet` |
 | PATCH | `/api/sources/:id` | campos a mudar | DEV. Valida o estado final; trocar grupo/tipo ou **religar** espelhamento zera a posição de leitura |
 | POST | `/api/sources/:id/run` | — | DEV. Roda a fonte agora (400 para `MIRROR`: roda sozinho) |
+| DELETE | `/api/sources/:id` | — | DEV. Remove a fonte (cascata: eventos e links vistos; sugestões/cupons ficam sem fonte). Auditado |
 | GET | `/api/sources/:id/events` | — | últimas 30 mensagens do espelhamento (`status`, `detail`, links, post) |
 | POST | `/api/sources/:id/dismiss-alert` | — | limpa o alerta da fonte (qualquer perfil; auditado) |
 | GET | `/api/coupons` | `?status=NEW\|VALID\|RESTRICTED\|INVALID\|EXPIRED&store=MERCADOLIVRE\|AMAZON\|SHOPEE\|ALIEXPRESS` | `{ coupons (200), counts por status }` |

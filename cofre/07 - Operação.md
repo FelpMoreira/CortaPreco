@@ -31,6 +31,8 @@ npm run dev:web               # :3000 — site em /, painel em /admin
 2. Mande `/chatid` lá dentro (o bot responde o ID — só para admins do bot).
 3. Painel → Administração → **Canais** → Novo canal: cole o ID, marque as categorias. O sistema confere se o bot pode postar.
 4. "Testar" manda uma mensagem de verificação. Canal sem categoria marcada = **geral** (recebe tudo).
+- Prefira **canal** do Telegram (ou supergrupo) já na criação: grupo comum muda de ID quando vira supergrupo
+  (histórico visível, link público, muitos membros) e o bot pode perder o cargo de administrador.
 - Cada oferta vai para o geral + os canais da categoria dela. Ajuste a categoria no editor, na sugestão ou em Produtos.
 
 ## Fontes de ofertas por canal
@@ -42,6 +44,8 @@ npm run dev:web               # :3000 — site em /, painel em /admin
     (sem o rastreio de quem postou) e gera sugestões com o nosso link, texto e imagem.
 - Sugestões chegam com **"Para: <canal>"**. O grupo geral só recebe nicho com nota ≥ o limiar dele (padrão 80).
 - "▶" roda a fonte na hora; o resultado da última rodada aparece no card da fonte.
+- 🗑️ (lixeira, só DEV) remove a fonte depois de confirmar: some o histórico dela (espelhamento, links vistos);
+  sugestões, cupons e posts já agendados continuam. Fica na auditoria como `source.delete`.
 - **Postar automaticamente** (na fonte): busca sozinha quando a fila do canal baixa de 2 e manda para a fila o que
   tiver nota ≥ o mínimo (checagem a cada 1–2 min). O intervalo da fonte vira o mínimo entre buscas.
   Acompanhe em **Operação → Filas**.
@@ -124,5 +128,8 @@ Mínimo para lançar (detalhes em [[08 - Segurança#Checklist de lançamento]]):
 | Espelhamento Amazon: "a Amazon não mostrou o preço" | Tela anti-robô da Amazon | Passa sozinho; se repetir muito, o grupo posta Amazon demais (teto 30/h) |
 | Evento "ignorado: não é de um produto" | Link do grupo era Prime/lista/vitrine | Normal, sem alerta |
 | Fonte automática demora a repor a fila | "Ofertas por busca / intervalo mín." alto | Use 15 min (padrão ao ligar o automático) |
+| FAILED "group chat was upgraded to a supergroup chat" | Grupo virou supergrupo (ex.: ligaram "histórico visível para novos membros") e mudou de ID | Desde 2026-09-26 o sistema troca o ID sozinho e reenvia; o botão "Testar" do canal mostra o ID novo |
+| FAILED `CHAT_WRITE_FORBIDDEN` / "not enough rights" | O bot não é administrador (na conversão para supergrupo ele pode perder o cargo) | Tornar o bot administrador com permissão de postar e reativar o canal |
+| Novos membros não veem mensagens antigas | Grupo comum esconde o histórico | Configurações do grupo → "Histórico do chat para novos membros: Visível" (vira supergrupo; confira o bot como admin). Canal do Telegram mostra tudo por padrão |
 | `ml:login`: "limite de tentativas" | Antifraude do ML (tentativas seguidas ou janela de automação) | Parar, esperar algumas horas; o `ml:login` atual usa o Chrome comum (sem automação) |
 | Espelhamento: "Não consegui ler o grupo …" | Conta dedicada não é membro, @ errado ou ID sem cache | Entrar no grupo com a conta; preferir `@usuario` |

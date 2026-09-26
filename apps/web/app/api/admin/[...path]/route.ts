@@ -22,6 +22,7 @@ const ALLOWED: [method: string, path: RegExp][] = [
   ['GET', /^sources\/presets$/],
   ['POST', new RegExp(`^channels/${ID}/sources$`)],
   ['PATCH', new RegExp(`^sources/${ID}$`)],
+  ['DELETE', new RegExp(`^sources/${ID}$`)],
   ['POST', new RegExp(`^sources/${ID}/run$`)],
   ['GET', new RegExp(`^sources/${ID}/events$`)],
   ['POST', new RegExp(`^sources/${ID}/dismiss-alert$`)],
@@ -50,7 +51,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
     return NextResponse.json({ ok: false, error: 'Rota não encontrada' }, { status: 404 });
   }
   const query = req.nextUrl.searchParams.toString();
-  const body = req.method === 'GET' ? undefined : await req.text();
+  const body = req.method === 'GET' || req.method === 'DELETE' ? undefined : await req.text();
   const { status, data } = await callApi(
     `/api/${path}${query ? `?${query}` : ''}`,
     { method: req.method, body },
@@ -59,4 +60,4 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   return NextResponse.json(data, { status });
 }
 
-export { handle as GET, handle as POST, handle as PATCH };
+export { handle as GET, handle as POST, handle as PATCH, handle as DELETE };

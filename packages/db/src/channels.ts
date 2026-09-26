@@ -50,11 +50,13 @@ export function channelsFromEnv(env: Env): ChannelConfig[] {
 }
 
 /**
- * Semeia os canais do .env na primeira vez (canal ainda não existe no banco). Depois disso,
- * nome, categorias, ritmo e ativação são geridos pelo painel — o .env não sobrescreve mais.
+ * Semeia os canais do .env só quando o banco ainda não tem NENHUM canal. Depois disso, tudo (inclusive
+ * o ID do grupo) é gerido pelo painel. Antes semeava "se o ID do .env não existia": quando o grupo virou
+ * supergrupo e o ID mudou (2026-09-26), isso recriaria o canal com o ID morto a cada reinício.
  */
 export async function syncChannels(env: Env): Promise<Channel[]> {
-  for (const c of channelsFromEnv(env)) {
+  const seeds = (await prisma.channel.count()) === 0 ? channelsFromEnv(env) : [];
+  for (const c of seeds) {
     const { platform, target, ...limits } = c;
     const exists = await prisma.channel.findUnique({ where: { platform_target: { platform, target } } });
     if (!exists) await prisma.channel.create({ data: { platform, target, ...limits, enabled: true } });

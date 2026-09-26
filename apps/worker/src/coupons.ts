@@ -10,7 +10,8 @@ import {
   type MirrorJob,
 } from '@cupons/shared';
 import { config } from './config.js';
-import { sendTelegramMessage } from './sender.js';
+import { ChatMigratedError, sendTelegramMessage } from './sender.js';
+import { followMigration } from './worker.js';
 import { extractLinks, type MessageLike } from './telegramLinks.js';
 
 /**
@@ -146,7 +147,10 @@ async function sendCouponPost(couponId: string): Promise<void> {
     expiresAt: coupon.expiresAt,
   });
   try {
-    await sendTelegramMessage(coupon.source.channel.target, html);
+    await sendTelegramMessage(coupon.source.channel.target, html).catch(async (err) => {
+      if (!(err instanceof ChatMigratedError)) throw err;
+      return sendTelegramMessage(await followMigration(err), html); // grupo virou supergrupo
+    });
     await prisma.coupon.update({ where: { id: coupon.id }, data: { postedAt: new Date(), postError: null } });
     console.log(`[cupons] publicado ${coupon.store}:${coupon.code} em ${coupon.source.channel.name}`);
   } catch (err) {

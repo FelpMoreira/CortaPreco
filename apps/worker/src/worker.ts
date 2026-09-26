@@ -1,16 +1,41 @@
 import { Worker } from 'bullmq';
 import { prisma } from '@cupons/db';
 import { config } from './config.js';
-import { sendTelegramMessage, sendTelegramPhoto } from './sender.js';
+import { ChatMigratedError, sendTelegramMessage, sendTelegramPhoto } from './sender.js';
 import { sendWhatsApp } from './whatsapp.js';
 import { verifyBeforePosting } from './verify.js';
 
-/** Telegram: foto + legenda (HTML); se a imagem falhar, só texto. */
+/**
+ * Grupo migrou para supergrupo: atualiza o canal para o ID novo (todos os canais com o ID antigo) e
+ * devolve o ID novo para reenviar na hora. Fica registrado na auditoria.
+ */
+export async function followMigration(err: ChatMigratedError): Promise<string> {
+  const moved = await prisma.channel.updateMany({ where: { platform: 'TELEGRAM', target: err.oldChatId }, data: { target: err.newChatId } });
+  if (moved.count) {
+    await prisma.auditLog
+      .create({ data: { action: 'channel.migrated', target: err.newChatId, detail: `grupo virou supergrupo: ${err.oldChatId} → ${err.newChatId}` } })
+      .catch(() => undefined);
+    console.warn(`[worker] grupo virou supergrupo: ${err.oldChatId} → ${err.newChatId} (canal atualizado)`);
+  }
+  return err.newChatId;
+}
+
+/** Telegram: foto + legenda (HTML); se a imagem falhar, só texto. Segue migração para supergrupo. */
 async function sendTelegram(target: string, message: string, imageUrl: string | null): Promise<number | null> {
+  try {
+    return await sendTelegramOnce(target, message, imageUrl);
+  } catch (err) {
+    if (!(err instanceof ChatMigratedError)) throw err;
+    return sendTelegramOnce(await followMigration(err), message, imageUrl);
+  }
+}
+
+async function sendTelegramOnce(target: string, message: string, imageUrl: string | null): Promise<number | null> {
   if (imageUrl) {
     try {
       return (await sendTelegramPhoto(target, imageUrl, message)).messageId ?? null;
-    } catch {
+    } catch (err) {
+      if (err instanceof ChatMigratedError) throw err; // não é problema da imagem
       // imagem inacessível p/ o Telegram → cai pra texto
     }
   }

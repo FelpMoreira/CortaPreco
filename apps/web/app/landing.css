@@ -543,6 +543,35 @@ body:has(.lp) {
 
 /* ---------- ofertas ---------- */
 
+.lp-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 28px;
+}
+.lp-pager-nums {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.lp-pager-gap {
+  align-self: center;
+  color: var(--muted);
+  padding: 0 2px;
+}
+.lp-pager-info {
+  flex-basis: 100%;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.lp .chip[aria-disabled='true'] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .lp-filter {
   display: flex;
   gap: 8px;

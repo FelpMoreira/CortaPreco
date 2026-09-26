@@ -145,6 +145,19 @@
   ativado de…", valores em linha separada e validade como cronômetro ("Encerra em 01:45:00"). Ponta a ponta com canal
   falso: 3 cupons do ML válidos + 1 da Amazon agendados a cada ~35 s e enviados ("chat not found"); escolha do cupom junto
   do post conferida (ML R$ 300 → TODOSITE10; R$ 50 → nenhum; Amazon R$ 150 → cupom; R$ 80 → nenhum).
+- **2026-09-26** — **posts pararam a partir das 09:41**: os dois grupos (Variedades e Games) viraram **supergrupo** — acontece ao
+  ligar "Histórico do chat para novos membros: Visível" (era a queixa de que novos membros não viam as mensagens). O ID
+  muda (`-5…` → `-100…`) e o Telegram recusa o antigo ("group chat was upgraded to a supergroup chat"); 45 posts falharam.
+  Corrigido: IDs novos (o próprio erro traz `migrate_to_chat_id`), 12 posts únicos do Variedades de volta à fila (9
+  repetidos cancelados; o 1º saiu às 11:11), espelhamento velho não reenviado. Agora o envio **segue a migração sozinho**
+  (atualiza o canal e reenvia, auditoria `channel.migrated`) e o canal do `.env` só é semeado com o banco vazio (antes
+  recriaria o canal com o ID morto a cada reinício). No Games o bot virou **membro comum** na conversão
+  (`CHAT_WRITE_FORBIDDEN`: só admins postam) → canal pausado até torná-lo administrador de novo.
+- **2026-09-26** — **paginação** no catálogo do site: 24 por página, feita no banco (`DISTINCT ON` loja + título, então dá
+  para navegar por todo o histórico, não só pelos últimos 60), filtro de loja + página na URL (`/?loja=aliexpress&pagina=2`),
+  navegação "‹ Anterior 1 … 4 5 6 … N Próxima ›" e aviso para página que não existe. 111 ofertas, 0 repetidas.
+- **2026-09-26** — botão **remover fonte** (lixeira) em todos os tipos; `DELETE /api/sources/:id` (DEV, auditado). O proxy do
+  painel passou a aceitar DELETE.
 - **2026-09-26** — bot estava parado desde 2026-09-25 21:14 UTC (recebeu SIGTERM numa recriação e tinha `restart: "no"`).
   Não afetou posts (quem publica é o worker). Religado com `restart: on-failure` (sem token sai com 0 e não entra em loop).
 

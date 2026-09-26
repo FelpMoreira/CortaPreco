@@ -10,6 +10,7 @@ import {
   LuCircleX,
   LuHistory,
   LuRepeat2,
+  LuTrash2,
   LuTriangleAlert,
 } from 'react-icons/lu';
 import { adminFetch, fmtDate, type Notify } from './common';
@@ -250,6 +251,7 @@ export function MirrorCard({
   quietHours,
   notify,
   onEdit,
+  onRemove,
   onChanged,
 }: {
   s: MirrorSourceRow;
@@ -258,6 +260,7 @@ export function MirrorCard({
   quietHours: string;
   notify: Notify;
   onEdit: () => void;
+  onRemove: () => void;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -314,6 +317,11 @@ export function MirrorCard({
           {canEdit && (
             <button className="btn ghost sm" onClick={onEdit}>
               Editar
+            </button>
+          )}
+          {canEdit && (
+            <button className="btn danger sm" onClick={onRemove} title="Remover">
+              <LuTrash2 size={13} />
             </button>
           )}
           <button
@@ -467,6 +475,7 @@ export function CouponSourceCard({
   canEdit,
   notify,
   onEdit,
+  onRemove,
   onChanged,
 }: {
   s: CouponSourceRow;
@@ -474,6 +483,7 @@ export function CouponSourceCard({
   canEdit: boolean;
   notify: Notify;
   onEdit: () => void;
+  onRemove: () => void;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -520,6 +530,11 @@ export function CouponSourceCard({
           {canEdit && (
             <button className="btn ghost sm" onClick={onEdit}>
               Editar
+            </button>
+          )}
+          {canEdit && (
+            <button className="btn danger sm" onClick={onRemove} title="Remover">
+              <LuTrash2 size={13} />
             </button>
           )}
           <button

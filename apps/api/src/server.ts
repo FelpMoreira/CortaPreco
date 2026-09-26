@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
-import { afterQuietHours, channelPacing, prisma, type Channel } from '@cupons/db';
+import { afterQuietHours, channelPacing, Prisma, prisma, type Channel } from '@cupons/db';
 import { curatorFromEnv } from '@cupons/curator';
 import { config } from './config.js';
 import { registerAuth } from './auth/routes.js';
@@ -120,35 +120,88 @@ export function buildServer(): FastifyInstance {
   app.get('/api/health', async () => ({ ok: true }));
 
   // ---------- catálogo público (site) ----------
-  app.get('/api/public/catalog', async () => {
-    const posts = await prisma.post.findMany({
-      where: { status: 'POSTED' },
-      orderBy: { postedAt: 'desc' },
-      take: 60,
-      select: {
-        id: true,
-        postedAt: true,
-        product: {
-          select: { store: true, title: true, imageUrl: true, price: true, oldPrice: true, discountPct: true, coupon: true },
+  // catálogo público paginado: um card por produto (o post mais recente dele), filtro por loja
+  const CATALOG_PER_PAGE = 24;
+  app.get(
+    '/api/public/catalog',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            page: { type: 'integer', minimum: 1, maximum: 1000, default: 1 },
+            store: { type: 'string', enum: ['SHOPEE', 'ALIEXPRESS', 'AMAZON', 'MERCADOLIVRE'] },
+          },
         },
       },
-    });
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const [totalPosted, best, week] = await Promise.all([
-      prisma.post.count({ where: { status: 'POSTED' } }),
-      prisma.product.aggregate({
-        where: { posts: { some: { status: 'POSTED', postedAt: { gte: weekAgo } } } },
-        _max: { discountPct: true },
-      }),
-      prisma.post.count({ where: { status: 'POSTED', postedAt: { gte: weekAgo } } }),
-    ]);
-    return {
-      ok: true,
-      base: `${config.publicBaseUrl || `http://localhost:${config.port}`}/c/`,
-      stats: { totalPosted, postedThisWeek: week, bestDiscountWeek: best._max.discountPct ?? null },
-      posts,
-    };
-  });
+    },
+    async (req) => {
+      const { page = 1, store } = req.query as { page?: number; store?: string };
+      const byStore = store ? Prisma.sql`and pr.store = ${store}` : Prisma.empty;
+      type Row = {
+        id: string;
+        postedAt: Date | null;
+        store: string;
+        title: string;
+        imageUrl: string | null;
+        price: Prisma.Decimal;
+        oldPrice: Prisma.Decimal | null;
+        discountPct: number | null;
+        coupon: string | null;
+      };
+      // DISTINCT ON loja + título: o mesmo produto postado de novo (ou em outro canal) — e anúncios diferentes com o
+      // mesmo título (comum no AliExpress) — aparecem uma vez, com o post mais recente
+      const latest = Prisma.sql`
+        select distinct on (pr.store, lower(pr.title)) p.id, p."productId", p."postedAt"
+        from "Post" p join "Product" pr on pr.id = p."productId"
+        where p.status = 'POSTED' and p."postedAt" is not null
+        order by pr.store, lower(pr.title), p."postedAt" desc`;
+      const [rows, totalRows, featured] = await Promise.all([
+        prisma.$queryRaw<Row[]>`
+          select x.id, x."postedAt", pr.store, pr.title, pr."imageUrl", pr.price, pr."oldPrice", pr."discountPct", pr.coupon
+          from (${latest}) x join "Product" pr on pr.id = x."productId"
+          where true ${byStore}
+          order by x."postedAt" desc
+          limit ${CATALOG_PER_PAGE} offset ${(page - 1) * CATALOG_PER_PAGE}`,
+        prisma.$queryRaw<{ total: number }[]>`
+          select count(*)::int as total from (${latest}) x join "Product" pr on pr.id = x."productId" where true ${byStore}`,
+        // destaque do topo do site: oferta mais recente com foto, de qualquer loja
+        prisma.post.findFirst({
+          where: { status: 'POSTED', product: { imageUrl: { not: null } } },
+          orderBy: { postedAt: 'desc' },
+          select: {
+            id: true,
+            postedAt: true,
+            product: { select: { store: true, title: true, imageUrl: true, price: true, oldPrice: true, discountPct: true, coupon: true } },
+          },
+        }),
+      ]);
+      const posts = rows.map(({ id, postedAt, ...product }) => ({ id, postedAt, product }));
+      const total = totalRows[0]?.total ?? 0;
+
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const [totalPosted, best, week] = await Promise.all([
+        prisma.post.count({ where: { status: 'POSTED' } }),
+        prisma.product.aggregate({
+          where: { posts: { some: { status: 'POSTED', postedAt: { gte: weekAgo } } } },
+          _max: { discountPct: true },
+        }),
+        prisma.post.count({ where: { status: 'POSTED', postedAt: { gte: weekAgo } } }),
+      ]);
+      return {
+        ok: true,
+        base: `${config.publicBaseUrl || `http://localhost:${config.port}`}/c/`,
+        stats: { totalPosted, postedThisWeek: week, bestDiscountWeek: best._max.discountPct ?? null },
+        page,
+        perPage: CATALOG_PER_PAGE,
+        total,
+        pages: Math.max(1, Math.ceil(total / CATALOG_PER_PAGE)),
+        featured,
+        posts,
+      };
+    },
+  );
 
   // ---------- preview (admin) ----------
   app.post(
@@ -765,6 +818,17 @@ export function buildServer(): FastifyInstance {
     if (coupon.store !== 'MERCADOLIVRE') return reply.code(400).send({ ok: false, error: 'Teste automático só para cupons do Mercado Livre.' });
     await mirrorQueue.add('coupon-test', { couponId: id }, { jobId: `coupon-test-${id}-${Date.now()}`, removeOnComplete: true, removeOnFail: 50 });
     await audit(req, 'coupon.test', id, coupon.code);
+    return { ok: true };
+  });
+
+  // remover uma fonte (cadastrada errada, grupo que não interessa mais). Leva junto o histórico do espelhamento
+  // e os links vistos; sugestões e cupons que ela trouxe ficam (sem a fonte). Posts já agendados continuam.
+  app.delete('/api/sources/:id', { config: { roles: ['DEV'] }, schema: { params: idParams } }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const source = await prisma.channelSource.findUnique({ where: { id }, include: { channel: { select: { name: true } } } });
+    if (!source) return reply.code(404).send({ ok: false, error: 'Fonte não encontrada.' });
+    await prisma.channelSource.delete({ where: { id } });
+    await audit(req, 'source.delete', id, `${source.kind} · ${source.label}${source.telegramChat ? ` · ${source.telegramChat}` : ''} (canal ${source.channel.name})`);
     return { ok: true };
   });
 

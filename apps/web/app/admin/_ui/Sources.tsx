@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LuPlay, LuPlus, LuRepeat2, LuSave, LuSend, LuStore, LuX } from 'react-icons/lu';
+import { LuPlay, LuPlus, LuRepeat2, LuSave, LuSend, LuStore, LuTrash2, LuX } from 'react-icons/lu';
 import { adminFetch, fmtDate, type Notify } from './common';
 import { CouponFormFields, CouponSourceCard, MirrorCard, MirrorFormFields, type MirrorPresets } from './Mirror';
 
@@ -384,6 +384,19 @@ export function ChannelSources({
     }
   }
 
+  async function remove(s: SourceRow) {
+    const what = s.kind === 'MIRROR' ? 'o espelhamento' : s.kind === 'COUPONS' ? 'o grupo de cupons' : 'a fonte';
+    if (!window.confirm(`Remover ${what} "${s.label}"${s.telegramChat ? ` (${s.telegramChat})` : ''}? O histórico dela some; sugestões, cupons e posts já agendados continuam.`)) return;
+    try {
+      await adminFetch(`sources/${s.id}`, { method: 'DELETE' });
+      notify('success', 'Fonte removida.');
+      setEditing(null);
+      onChanged();
+    } catch (e) {
+      notify('error', (e as Error).message);
+    }
+  }
+
   async function act(s: SourceRow, what: 'run' | 'toggle') {
     try {
       if (what === 'run') {
@@ -441,6 +454,7 @@ export function ChannelSources({
             canEdit={canEdit}
             notify={notify}
             onEdit={() => setEditing(s.id)}
+            onRemove={() => void remove(s)}
             onChanged={onChanged}
           />
         ) : s.kind === 'MIRROR' ? (
@@ -452,6 +466,7 @@ export function ChannelSources({
             quietHours={quietHours}
             notify={notify}
             onEdit={() => setEditing(s.id)}
+            onRemove={() => void remove(s)}
             onChanged={onChanged}
           />
         ) : (
@@ -489,6 +504,9 @@ export function ChannelSources({
                 </button>
                 <button className="btn ghost sm" onClick={() => void act(s, 'toggle')}>
                   {s.enabled ? 'Pausar' : 'Ativar'}
+                </button>
+                <button className="btn danger sm" onClick={() => void remove(s)} title="Remover esta fonte">
+                  <LuTrash2 size={13} />
                 </button>
               </div>
             )}

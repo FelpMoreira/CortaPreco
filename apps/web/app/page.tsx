@@ -57,6 +57,12 @@ interface CatalogPost {
 interface Catalog {
   base: string;
   stats?: { totalPosted: number; postedThisWeek: number; bestDiscountWeek: number | null };
+  /** página pedida, total de ofertas (um card por produto) e de páginas, 24 por página */
+  page: number;
+  pages: number;
+  total: number;
+  /** destaque do topo: oferta mais recente com foto, de qualquer loja */
+  featured: CatalogPost | null;
   posts: CatalogPost[];
 }
 
@@ -86,9 +92,10 @@ const discountOf = (p: CatalogPost['product']) =>
   p.discountPct ??
   (Number(p.oldPrice) > Number(p.price) ? Math.round((1 - Number(p.price) / Number(p.oldPrice)) * 100) : null);
 
-async function loadCatalog(): Promise<Catalog | null> {
+async function loadCatalog(page: number, store?: string): Promise<Catalog | null> {
+  const q = new URLSearchParams({ page: String(page), ...(store ? { store } : {}) });
   try {
-    const res = await fetch(`${API_URL}/api/public/catalog`, {
+    const res = await fetch(`${API_URL}/api/public/catalog?${q}`, {
       next: { revalidate: 60 },
       signal: AbortSignal.timeout(5000),
     });
@@ -122,18 +129,14 @@ const FAQ: [string, string][] = [
   ],
 ];
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ loja?: string }> }) {
-  const { loja } = await searchParams;
-  const catalog = await loadCatalog();
-  // mesmo produto postado de novo aparece uma vez só (fica o post mais recente)
-  const seen = new Set<string>();
-  const all = (catalog?.posts ?? []).filter((p) => {
-    const key = `${p.product.store}:${p.product.title}`;
-    return seen.has(key) ? false : (seen.add(key), true);
-  });
+export default async function Home({ searchParams }: { searchParams: Promise<{ loja?: string; pagina?: string }> }) {
+  const { loja, pagina } = await searchParams;
   const store = STORES.find((s) => s.slug === loja);
-  const posts = store ? all.filter((p) => p.product.store === store.key) : all;
-  const featured = all.find((p) => p.product.imageUrl) ?? all[0];
+  const page = Math.min(1000, Math.max(1, Number.parseInt(pagina ?? '1', 10) || 1));
+  // paginação e "um card por produto" são feitas na API (24 por página)
+  const catalog = await loadCatalog(page, store?.key);
+  const posts = catalog?.posts ?? [];
+  const featured = catalog?.featured ?? posts[0];
   const stats = catalog?.stats;
 
   const ctaHref = TELEGRAM_URL || '#ofertas';
@@ -228,7 +231,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
             {stats && stats.postedThisWeek >= 10 ? (
               <Stat icon={<LuTag size={22} />} value={String(stats.postedThisWeek)} label="ofertas nos últimos 7 dias" />
             ) : null}
-            <Stat icon={<LuStore size={22} />} value="3" label="grandes lojas monitoradas" />
+            <Stat icon={<LuStore size={22} />} value={String(STORES.length)} label="grandes lojas monitoradas" />
             <Stat icon={<LuWallet size={22} />} value="R$ 0" label="para participar, sempre" />
           </div>
         </div>
@@ -253,7 +256,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
                   key={s.key}
                   className="chip"
                   aria-current={store?.key === s.key ? 'page' : undefined}
-                  href={`/?loja=${s.slug}#ofertas`}
+                  href={pageHref(1, s.slug)}
                 >
                   {s.name}
                 </a>
@@ -264,14 +267,25 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
               <p className="card empty">Não foi possível carregar as ofertas agora. Tente de novo em instantes.</p>
             ) : posts.length === 0 ? (
               <p className="card empty">
-                {store ? `Nenhuma oferta da ${store.name} no momento.` : 'As primeiras ofertas chegam em breve.'}
+                {page > catalog.pages ? (
+                  <>
+                    Essa página não existe mais. <a href={pageHref(1, store?.slug)}>Ver as ofertas mais recentes</a>
+                  </>
+                ) : store ? (
+                  `Nenhuma oferta da ${store.name} no momento.`
+                ) : (
+                  'As primeiras ofertas chegam em breve.'
+                )}
               </p>
             ) : (
-              <div className="offers">
-                {posts.map((p) => (
-                  <OfferCard key={p.id} post={p} href={`${catalog.base}${p.id}`} />
-                ))}
-              </div>
+              <>
+                <div className="offers">
+                  {posts.map((p) => (
+                    <OfferCard key={p.id} post={p} href={`${catalog.base}${p.id}`} />
+                  ))}
+                </div>
+                <Pager page={catalog.page} pages={catalog.pages} total={catalog.total} store={store?.slug} />
+              </>
             )}
           </div>
         </section>
@@ -285,7 +299,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
             </div>
             <div className="lp-steps">
               <Step icon={<LuSearch size={22} />} title="A gente garimpa">
-                Acompanhamos as três maiores lojas do Brasil atrás de desconto de verdade e cupom ativo.
+                Acompanhamos as maiores lojas do Brasil atrás de desconto de verdade e cupom ativo.
               </Step>
               <Step icon={<LuBadgeCheck size={22} />} title="Conferimos o preço">
                 Antes de publicar, o preço é checado na loja. Oferta sem preço confirmado não sai.
@@ -581,5 +595,66 @@ function PhoneMockup({ post }: { post: CatalogPost | undefined }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Link de uma página do catálogo (mantém a loja; página 1 sem parâmetro) e volta para a seção de ofertas. */
+function pageHref(page: number, store?: string): string {
+  const q = new URLSearchParams({ ...(store ? { loja: store } : {}), ...(page > 1 ? { pagina: String(page) } : {}) });
+  return `/${q.toString() ? `?${q}` : ''}#ofertas`;
+}
+
+/** 1 … 4 5 6 … 12: primeira, última e a vizinhança da atual. */
+function pageNumbers(page: number, pages: number): (number | '…')[] {
+  const keep = new Set([1, pages, page - 1, page, page + 1].filter((n) => n >= 1 && n <= pages));
+  const out: (number | '…')[] = [];
+  let prev = 0;
+  for (const n of [...keep].sort((a, b) => a - b)) {
+    if (n - prev > 1) out.push('…');
+    out.push(n);
+    prev = n;
+  }
+  return out;
+}
+
+function Pager({ page, pages, total, store }: { page: number; pages: number; total: number; store?: string }) {
+  if (pages <= 1) return null;
+  return (
+    <nav className="lp-pager" aria-label="Páginas de ofertas">
+      {page > 1 ? (
+        <a className="chip" href={pageHref(page - 1, store)} rel="prev">
+          ‹ Anterior
+        </a>
+      ) : (
+        <span className="chip" aria-disabled="true">
+          ‹ Anterior
+        </span>
+      )}
+      <span className="lp-pager-nums">
+        {pageNumbers(page, pages).map((n, i) =>
+          n === '…' ? (
+            <span key={`gap-${i}`} className="lp-pager-gap">
+              …
+            </span>
+          ) : (
+            <a key={n} className="chip" href={pageHref(n, store)} aria-current={n === page ? 'page' : undefined}>
+              {n}
+            </a>
+          ),
+        )}
+      </span>
+      {page < pages ? (
+        <a className="chip" href={pageHref(page + 1, store)} rel="next">
+          Próxima ›
+        </a>
+      ) : (
+        <span className="chip" aria-disabled="true">
+          Próxima ›
+        </span>
+      )}
+      <span className="lp-pager-info">
+        Página {page} de {pages} · {total} ofertas
+      </span>
+    </nav>
   );
 }

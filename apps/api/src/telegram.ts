@@ -5,6 +5,7 @@ interface TgResponse<T> {
   ok: boolean;
   result?: T;
   description?: string;
+  parameters?: { migrate_to_chat_id?: number };
 }
 
 async function call<T>(method: string, body: Record<string, unknown>): Promise<T> {
@@ -20,6 +21,9 @@ async function call<T>(method: string, body: Record<string, unknown>): Promise<T
   // a descrição do Telegram nunca contém o token; seguro repassar
   if (!json.ok || json.result === undefined) {
     const d = json.description ?? `erro ${res.status}`;
+    // grupo virou supergrupo (ex.: "histórico visível para novos membros"): o ID mudou
+    const moved = json.parameters?.migrate_to_chat_id;
+    if (moved) throw new Error(`Esse grupo virou supergrupo e mudou de ID: edite o canal e use ${moved}.`);
     if (/chat not found/i.test(d)) throw new Error('O bot não está nesse grupo/canal, ou o ID está errado. Adicione o bot e use /chatid lá dentro.');
     if (/bot was kicked|not a member/i.test(d)) throw new Error('O bot foi removido desse grupo/canal. Adicione-o de novo como administrador.');
     throw new Error(`Telegram: ${d}`);
