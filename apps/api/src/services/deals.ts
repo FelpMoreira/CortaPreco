@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { escapeHtml, LINK_PLACEHOLDER, renderMessageHtml, telegramHtmlToWhatsApp } from '@cupons/shared';
+import { escapeHtml, LINK_PLACEHOLDER, renderMessageHtml, telegramHtmlToWhatsApp, type Store } from '@cupons/shared';
 import { ProviderRegistry } from '@cupons/affiliates';
 import { dailyCap, prisma, recordPrice, upsertProduct, type Product as PrismaProduct } from '@cupons/db';
 import { sanitizeHook } from '@cupons/curator';
@@ -19,7 +19,7 @@ export async function createProductFromUrl(rawUrl: string): Promise<PrismaProduc
 /** Mensagem padrão do produto, com o marcador no lugar do link (e a frase da curadoria, se houver). */
 export function defaultMessage(product: PrismaProduct, hook?: string | null): string {
   return renderMessageHtml({
-    store: product.store as 'SHOPEE' | 'ALIEXPRESS' | 'AMAZON',
+    store: product.store as Store,
     title: product.title,
     price: Number(product.price),
     oldPrice: product.oldPrice ? Number(product.oldPrice) : null,

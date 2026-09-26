@@ -2,7 +2,7 @@
  * Conecta a CONTA DEDICADA que lê outros grupos/canais (não use o seu número pessoal).
  * Pede telefone, código e senha de 2 etapas; no fim mostra TELEGRAM_USER_SESSION para o .env.
  *
- *   docker compose exec -it worker npm run telegram:login
+ *   docker compose exec -it worker npm run telegram:login -w @cupons/worker
  */
 import '../src/env.js';
 import { createInterface } from 'node:readline/promises';

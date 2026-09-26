@@ -7,8 +7,8 @@ export interface MessageLike {
 }
 
 const URL_RE = /https?:\/\/[^\s<>"'()]+/gi;
-// grupos costumam colar encurtador sem "https://": amzn.to/xyz, shope.ee/abc
-const BARE_RE = /(?<![\w./-])(amzn\.to|a\.co|shope\.ee|s\.shopee\.com\.br|s\.click\.aliexpress\.com|a\.aliexpress\.com|ali\.ski)\/[^\s<>"'()]+/gi;
+// grupos costumam colar encurtador sem "https://": amzn.to/xyz, shope.ee/abc, meli.la/abc
+const BARE_RE = /(?<![\w./-])(amzn\.to|a\.co|shope\.ee|s\.shopee\.com\.br|s\.click\.aliexpress\.com|a\.aliexpress\.com|ali\.ski|meli\.la)\/[^\s<>"'()]+/gi;
 const HOST_RE = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
 
 /** Todos os links da mensagem: no texto, escondidos em palavras (TextUrl) e em botões. */

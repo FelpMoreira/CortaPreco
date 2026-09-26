@@ -304,6 +304,8 @@ export function ChannelsTab({ me, notify }: { me: Me; notify: Notify }) {
               <ChannelSources
                 channelId={c.id}
                 categories={c.categories}
+                platform={c.platform}
+                quietHours={c.quietHours}
                 sources={c.sources}
                 canEdit={isDev}
                 notify={notify}

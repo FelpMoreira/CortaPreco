@@ -1,20 +1,24 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { LuBot, LuListOrdered, LuPause, LuRefreshCw, LuSend, LuStore, LuX, LuZap } from 'react-icons/lu';
+import { LuBot, LuListOrdered, LuPause, LuRefreshCw, LuRepeat2, LuSend, LuStore, LuX, LuZap } from 'react-icons/lu';
 import { CATEGORY_LABEL } from '@cupons/shared';
 import { adminFetch, fmtDate, Thumb, type Notify } from './common';
 import { dayLabel, hhmm, PageHeader, QueueBanner, type ChannelOverview } from './ui';
 
 interface QueueSource {
   id: string;
-  kind: 'API' | 'TELEGRAM';
+  kind: 'API' | 'TELEGRAM' | 'MIRROR';
   label: string;
   enabled: boolean;
   autoApprove: boolean;
   autoMinScore: number;
   lastRunAt: string | null;
   lastResult: string | null;
+  telegramChat: string | null;
+  chatTitle: string | null;
+  linkTypes: string[];
+  alert: string | null;
 }
 
 interface ChannelQueue extends ChannelOverview {
@@ -162,6 +166,10 @@ export function QueuesTab({ notify }: { notify: Notify }) {
                         <strong>{s.label}</strong>{' '}
                         {!s.enabled ? (
                           <span className="badge">desligada</span>
+                        ) : s.kind === 'MIRROR' ? (
+                          <span className="badge POSTED">
+                            <LuRepeat2 size={10} /> espelhando {s.chatTitle ?? s.telegramChat}
+                          </span>
                         ) : s.autoApprove ? (
                           <span className="badge POSTED">
                             <LuZap size={10} /> automática · nota ≥ {s.autoMinScore}
@@ -172,7 +180,10 @@ export function QueuesTab({ notify }: { notify: Notify }) {
                           </span>
                         )}
                         <div className="muted">
-                          {s.enabled && s.autoApprove
+                          {s.alert && <span style={{ color: 'var(--red)' }}>{s.alert} · </span>}
+                          {s.kind === 'MIRROR'
+                            ? 'Posta direto no canal a cada oferta do grupo (não passa por esta fila). '
+                            : s.enabled && s.autoApprove
                             ? q.scheduled < REFILL_BELOW
                               ? 'Fila acabando: busca mais ofertas em instantes. '
                               : `Busca de novo quando a fila baixar de ${REFILL_BELOW}. `

@@ -51,3 +51,14 @@
 
 ## Referências de implementação
 - `gregojoao/shopee-affiliate` (.NET), `Afilimax/*-provider` (Node), `DaniloCDev/lainMonitor` (ótimo modelo de conteúdo).
+
+## Mercado Livre (2026-09-25)
+
+- Links de afiliado do ML são gerados no **portal de afiliados** (`/afiliados/linkbuilder`), logado. O encurtador é `meli.la`.
+  Não usamos API oficial para isso: o espelhamento ([[10 - Espelhamento Mercado Livre]]) usa um navegador logado.
+- `meli.la/<código>` → 301 para `/social/<afiliado>?matt_word=…&matt_tool=…` (página do afiliado com o produto em destaque).
+- Página de produto acessada sem login por robô → `/gz/account-verification` (verificação). O card da página social traz
+  os mesmos dados (título, preço, preço antigo, desconto, imagem).
+- Rastreio de afiliado fica na query (`matt_word`, `matt_tool`, `ref`) e no hash (`#polycard_client=…`): tirar os dois
+  remove o afiliado de quem postou.
+

@@ -19,3 +19,7 @@ services:
     volumes:
       - ./apps/bot:/app/apps/bot
       - ./packages:/app/packages
+  linker:
+    volumes:
+      - ./apps/linker:/app/apps/linker
+      - ./packages:/app/packages

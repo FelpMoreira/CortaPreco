@@ -30,6 +30,15 @@ que injeta a chave (ver [[08 - Segurança]]).
 | POST | `/api/suggestions/:id/approve` | `{ hook?, publishNow? }` | agenda (ou posta já) com a chamada; hook validado sem números |
 | POST | `/api/suggestions/:id/reject` | — | só PENDING |
 | GET | `/api/stats` | — | `clicks, clicks24h, scheduled, posted, posted24h, failed, postedWithClicks, top[5]` |
+| GET | `/api/overview` | — | números, ritmo/fila por canal, publicados recentes e `alerts` (fontes com alerta) |
+| GET | `/api/queues` | — | fila completa de cada canal (ordem por nota) + fontes que a abastecem |
+| GET | `/api/channels` | — | canais com as fontes (`lastMessageId` como texto) |
+| GET | `/api/sources/presets` | — | termos por categoria, promoções AliExpress, lojas disponíveis, `telegramReader`, `mirror` (tipos de link + saúde do ouvinte e do conversor) |
+| POST | `/api/channels/:id/sources` | `kind` `API`\|`TELEGRAM`\|`MIRROR` + campos | DEV. `MIRROR` exige `telegramChat` e `linkTypes` (`MERCADOLIVRE`); só canal Telegram; `maxDelaySec` 0–600, `respectQuiet` |
+| PATCH | `/api/sources/:id` | campos a mudar | DEV. Valida o estado final; trocar grupo/tipo ou **religar** espelhamento zera a posição de leitura |
+| POST | `/api/sources/:id/run` | — | DEV. Roda a fonte agora (400 para `MIRROR`: roda sozinho) |
+| GET | `/api/sources/:id/events` | — | últimas 30 mensagens do espelhamento (`status`, `detail`, links, post) |
+| POST | `/api/sources/:id/dismiss-alert` | — | limpa o alerta da fonte (qualquer perfil; auditado) |
 
 ## Mensagem
 

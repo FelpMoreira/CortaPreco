@@ -23,6 +23,8 @@ const ALLOWED: [method: string, path: RegExp][] = [
   ['POST', new RegExp(`^channels/${ID}/sources$`)],
   ['PATCH', new RegExp(`^sources/${ID}$`)],
   ['POST', new RegExp(`^sources/${ID}/run$`)],
+  ['GET', new RegExp(`^sources/${ID}/events$`)],
+  ['POST', new RegExp(`^sources/${ID}/dismiss-alert$`)],
   // conta e sessões do próprio usuário
   ['GET', /^auth\/me$/],
   ['POST', /^auth\/password$/],

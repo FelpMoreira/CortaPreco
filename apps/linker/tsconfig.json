@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@cupons/db": [
+        "../../packages/db/src/index.ts"
+      ],
+      "@cupons/shared": [
+        "../../packages/shared/src/index.ts"
+      ]
+    },
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "src",
+    "scripts"
+  ]
+}

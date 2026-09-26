@@ -62,6 +62,9 @@ body:has(.lp) {
 :root[data-theme='light'] .lp .lp-store.amazon {
   color: #131921;
 }
+:root[data-theme='light'] .lp .lp-store.meli {
+  color: #2d3277;
+}
 :root[data-theme='light'] .lp .btn {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 6px 16px -6px rgba(22, 163, 74, 0.55);
 }
@@ -496,6 +499,9 @@ body:has(.lp) {
 }
 .lp-store.amazon {
   color: #ff9900;
+}
+.lp-store.meli {
+  color: #ffe600;
 }
 
 .lp-stats {

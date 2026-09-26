@@ -17,3 +17,6 @@ cofre/.obsidian/
 
 # dumps do banco (dados reais: não versionar)
 backups/
+
+# sessão do Mercado Livre (cookies = acesso à conta) e prints de falha do linker
+data/

@@ -4,6 +4,7 @@ import { prisma, syncChannels } from '@cupons/db';
 import { publishQueue, tickScheduler } from './scheduler.js';
 import { createPublishWorker } from './worker.js';
 import { createCurateWorker, curateQueue, scheduleDiscovery } from './curation.js';
+import { startMirror, stopMirror } from './mirror.js';
 
 // canais (Telegram/WhatsApp) e seus limites vêm do .env
 const channels = await syncChannels(process.env as Record<string, string | undefined>);
@@ -14,6 +15,9 @@ console.log('[worker] publish worker iniciado');
 
 const curateWorker = createCurateWorker();
 void scheduleDiscovery().catch((err) => console.error('[curadoria] erro ao agendar descoberta:', err));
+
+// espelhamento de grupos do Telegram (a conversão do link roda no serviço linker)
+startMirror();
 
 // scheduler: tick a cada 60s
 setInterval(() => {
@@ -27,6 +31,7 @@ const shutdown = async () => {
   await curateWorker.close();
   await publishQueue.close();
   await curateQueue.close();
+  await stopMirror();
   await prisma.$disconnect();
   process.exit(0);
 };

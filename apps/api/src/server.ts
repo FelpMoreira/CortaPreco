@@ -8,8 +8,15 @@ import { registerAuth } from './auth/routes.js';
 import { isProtectedApi } from './routeGuard.js';
 import { audit } from './auth/sessions.js';
 import { checkTelegramChat, sendTelegramTest } from './telegram.js';
-import { CATEGORIES, SEARCH_TERMS } from '@cupons/shared';
-import { curateQueue, type CurateJob } from './queue.js';
+import {
+  CATEGORIES,
+  MIRROR_DEFAULT_MAX_DELAY_SEC,
+  MIRROR_LINK_TYPE_KEYS,
+  MIRROR_LINK_TYPES,
+  MIRROR_MAX_DELAY_LIMIT_SEC,
+  SEARCH_TERMS,
+} from '@cupons/shared';
+import { curateQueue, mirrorStatus, type CurateJob } from './queue.js';
 import {
   approveSuggestion,
   cancelPost,
@@ -43,6 +50,9 @@ const idParams = {
 const PREVIEW_BOTS = /TelegramBot|WhatsApp|facebookexternalhit|Twitterbot|Slackbot|Discordbot|bot\b|crawler|spider/i;
 
 const POST_STATUSES = ['SCHEDULED', 'POSTING', 'POSTED', 'FAILED', 'CANCELED'];
+
+/** Fonte para o JSON: lastMessageId é BigInt (o JSON.stringify não serializa). */
+const publicSource = <T extends { lastMessageId: bigint | null }>(src: T) => ({ ...src, lastMessageId: src.lastMessageId?.toString() ?? null });
 
 /**
  * Ritmo do canal + fila com horário previsto: o primeiro sai em `nextAt`; os seguintes, a cada
@@ -472,7 +482,7 @@ export function buildServer(): FastifyInstance {
       },
     });
     // lastMessageId é BigInt: vira texto para o JSON
-    const out = channels.map((c) => ({ ...c, sources: c.sources.map((s) => ({ ...s, lastMessageId: s.lastMessageId?.toString() ?? null })) }));
+    const out = channels.map((c) => ({ ...c, sources: c.sources.map(publicSource) }));
     return { ok: true, channels: out, categories: CATEGORIES.map(({ slug, label }) => ({ slug, label })) };
   });
 
@@ -539,7 +549,7 @@ export function buildServer(): FastifyInstance {
     type: 'object',
     additionalProperties: false,
     properties: {
-      kind: { type: 'string', enum: ['API', 'TELEGRAM'] },
+      kind: { type: 'string', enum: ['API', 'TELEGRAM', 'MIRROR'] },
       label: { type: 'string', minLength: 2, maxLength: 60 },
       enabled: { type: 'boolean' },
       stores: { type: 'array', maxItems: 3, uniqueItems: true, items: { type: 'string', enum: ['ALIEXPRESS', 'SHOPEE', 'AMAZON'] } },
@@ -555,9 +565,27 @@ export function buildServer(): FastifyInstance {
       intervalMin: { type: 'integer', minimum: 10, maximum: 1440 },
       autoApprove: { type: 'boolean' },
       autoMinScore: { type: 'integer', minimum: 0, maximum: 100 },
+      // espelhamento (MIRROR): tipos de link, atraso aleatório e silêncio de madrugada
+      linkTypes: { type: 'array', maxItems: 5, uniqueItems: true, items: { type: 'string', enum: MIRROR_LINK_TYPE_KEYS } },
+      maxDelaySec: { type: 'integer', minimum: 0, maximum: MIRROR_MAX_DELAY_LIMIT_SEC },
+      respectQuiet: { type: 'boolean' },
     },
   } as const;
-  type SourceInput = Record<string, unknown> & { kind?: 'API' | 'TELEGRAM'; telegramChat?: string; stores?: string[] };
+  type SourceInput = Record<string, unknown> & {
+    kind?: 'API' | 'TELEGRAM' | 'MIRROR';
+    telegramChat?: string;
+    stores?: string[];
+    linkTypes?: string[];
+  };
+  /** Regras por tipo, sobre o estado FINAL da fonte (criação ou edição). Devolve o erro ou null. */
+  const sourceProblem = (f: { kind: string; stores: string[]; chat: string; linkTypes: string[] }, platform: string): string | null => {
+    if (f.kind === 'API' && !f.stores.length) return 'Escolha pelo menos uma loja.';
+    if ((f.kind === 'TELEGRAM' || f.kind === 'MIRROR') && !f.chat) return 'Informe o @ ou o ID do grupo/canal observado.';
+    if (f.kind === 'MIRROR' && !f.linkTypes.length) return 'Escolha que tipo de link o espelhamento pega.';
+    // rajada de posts no WhatsApp = risco de ban do número (D18)
+    if (f.kind === 'MIRROR' && platform !== 'TELEGRAM') return 'Espelhamento só para canais do Telegram.';
+    return null;
+  };
   const cleanList = (l: unknown) => (Array.isArray(l) ? [...new Set(l.map((x) => String(x).trim()).filter(Boolean))] : undefined);
   const sourceData = (b: SourceInput) => ({
     ...b,
@@ -581,6 +609,7 @@ export function buildServer(): FastifyInstance {
         AMAZON: false, // busca automática só com a Creators API
       },
       telegramReader: Boolean(process.env.TELEGRAM_API_ID && process.env.TELEGRAM_API_HASH && process.env.TELEGRAM_USER_SESSION),
+      mirror: { linkTypes: MIRROR_LINK_TYPES, defaultMaxDelaySec: MIRROR_DEFAULT_MAX_DELAY_SEC, ...(await mirrorStatus()) },
     };
   });
 
@@ -590,12 +619,16 @@ export function buildServer(): FastifyInstance {
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = req.body as SourceInput;
-      if (!(await prisma.channel.findUnique({ where: { id } }))) return reply.code(404).send({ ok: false, error: 'Canal não encontrado.' });
-      if (body.kind === 'API' && !body.stores?.length) return reply.code(400).send({ ok: false, error: 'Escolha pelo menos uma loja.' });
-      if (body.kind === 'TELEGRAM' && !body.telegramChat) return reply.code(400).send({ ok: false, error: 'Informe o @ ou o ID do grupo/canal de origem.' });
+      const channel = await prisma.channel.findUnique({ where: { id } });
+      if (!channel) return reply.code(404).send({ ok: false, error: 'Canal não encontrado.' });
+      const problem = sourceProblem(
+        { kind: body.kind!, stores: body.stores ?? [], chat: (body.telegramChat ?? '').trim(), linkTypes: body.linkTypes ?? [] },
+        channel.platform,
+      );
+      if (problem) return reply.code(400).send({ ok: false, error: problem });
       const source = await prisma.channelSource.create({ data: { ...(sourceData(body) as object), channelId: id } as never });
-      await audit(req, 'source.create', source.id, `${source.kind} · ${source.label}`);
-      return { ok: true, source: { ...source, lastMessageId: null } };
+      await audit(req, 'source.create', source.id, `${source.kind} · ${source.label}${source.telegramChat ? ` · ${source.telegramChat}` : ''}`);
+      return { ok: true, source: publicSource(source) };
     },
   );
 
@@ -605,28 +638,70 @@ export function buildServer(): FastifyInstance {
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = req.body as SourceInput;
-      const current = await prisma.channelSource.findUnique({ where: { id } });
+      const current = await prisma.channelSource.findUnique({ where: { id }, include: { channel: { select: { platform: true } } } });
       if (!current) return reply.code(404).send({ ok: false, error: 'Fonte não encontrada.' });
       // valida o estado FINAL (o que já existe + o que mudou), como na criação
       const kind = body.kind ?? current.kind;
-      const stores = body.stores ?? current.stores;
       const chat = (body.telegramChat ?? current.telegramChat ?? '').trim();
-      if (kind === 'API' && !stores.length) return reply.code(400).send({ ok: false, error: 'Escolha pelo menos uma loja.' });
-      if (kind === 'TELEGRAM' && !chat) return reply.code(400).send({ ok: false, error: 'Informe o @ ou o ID do grupo/canal de origem.' });
+      const problem = sourceProblem(
+        { kind, stores: body.stores ?? current.stores, chat, linkTypes: body.linkTypes ?? current.linkTypes },
+        current.channel.platform,
+      );
+      if (problem) return reply.code(400).send({ ok: false, error: problem });
       // o número das mensagens é por grupo: trocou o grupo (ou o tipo), volta a ler do começo
+      // (no espelhamento, "do começo" = a partir da próxima mensagem; o histórico não é repostado)
       const restart = kind !== current.kind || chat !== (current.telegramChat ?? '');
+      // religou o espelhamento: não despeja o que o grupo postou enquanto estava desligado
+      const reenabled = kind === 'MIRROR' && body.enabled === true && !current.enabled;
       const source = await prisma.channelSource.update({
         where: { id },
-        data: { ...(sourceData(body) as object), ...(restart ? { lastMessageId: null } : {}) } as never,
+        data: {
+          ...(sourceData(body) as object),
+          ...(restart || reenabled ? { lastMessageId: null } : {}),
+          ...(restart ? { chatTitle: null } : {}),
+        } as never,
       });
       await audit(req, 'source.update', id, JSON.stringify(body).slice(0, 300));
-      return { ok: true, source: { ...source, lastMessageId: source.lastMessageId?.toString() ?? null } };
+      return { ok: true, source: publicSource(source) };
     },
   );
 
+  // histórico do espelhamento: o que chegou do grupo e o que virou (post, falha, ignorado)
+  app.get('/api/sources/:id/events', { schema: { params: idParams } }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!(await prisma.channelSource.findUnique({ where: { id }, select: { id: true } }))) {
+      return reply.code(404).send({ ok: false, error: 'Fonte não encontrada.' });
+    }
+    const events = await prisma.sourceEvent.findMany({ where: { sourceId: id }, orderBy: { createdAt: 'desc' }, take: 30 });
+    const posts = await prisma.post.findMany({
+      where: { id: { in: events.flatMap((e) => (e.postId ? [e.postId] : [])) } },
+      select: { id: true, status: true, postedAt: true, lastError: true },
+    });
+    return {
+      ok: true,
+      events: events.map((e) => ({
+        ...e,
+        messageId: e.messageId?.toString() ?? null,
+        post: posts.find((p) => p.id === e.postId) ?? null,
+      })),
+    };
+  });
+
+  // alerta visto: some do painel (o histórico continua em eventos/auditoria). Qualquer perfil pode dispensar.
+  app.post('/api/sources/:id/dismiss-alert', { schema: { params: idParams } }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const current = await prisma.channelSource.findUnique({ where: { id }, select: { alert: true } });
+    if (!current) return reply.code(404).send({ ok: false, error: 'Fonte não encontrada.' });
+    await prisma.channelSource.update({ where: { id }, data: { alert: null, alertAt: null, alertCount: 0 } });
+    await audit(req, 'source.dismiss_alert', id, current.alert?.slice(0, 300) ?? null);
+    return { ok: true };
+  });
+
   app.post('/api/sources/:id/run', { config: { roles: ['DEV'] }, schema: { params: idParams } }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    if (!(await prisma.channelSource.findUnique({ where: { id } }))) return reply.code(404).send({ ok: false, error: 'Fonte não encontrada.' });
+    const found = await prisma.channelSource.findUnique({ where: { id }, select: { kind: true } });
+    if (!found) return reply.code(404).send({ ok: false, error: 'Fonte não encontrada.' });
+    if (found.kind === 'MIRROR') return reply.code(400).send({ ok: false, error: 'O espelhamento roda sozinho, a cada mensagem do grupo.' });
     await curateQueue.add('source', { kind: 'source', sourceId: id } satisfies CurateJob, {
       jobId: `source-${id}`,
       removeOnComplete: true,
@@ -660,7 +735,20 @@ export function buildServer(): FastifyInstance {
       include: {
         sources: {
           orderBy: { createdAt: 'asc' },
-          select: { id: true, kind: true, label: true, enabled: true, autoApprove: true, autoMinScore: true, lastRunAt: true, lastResult: true },
+          select: {
+            id: true,
+            kind: true,
+            label: true,
+            enabled: true,
+            autoApprove: true,
+            autoMinScore: true,
+            lastRunAt: true,
+            lastResult: true,
+            telegramChat: true,
+            chatTitle: true,
+            linkTypes: true,
+            alert: true,
+          },
         },
         _count: { select: { suggestions: { where: { status: 'PENDING' } } } },
       },
@@ -716,6 +804,13 @@ export function buildServer(): FastifyInstance {
       },
       channels: channelInfo,
       recent,
+      // alertas das fontes (ex.: conversão de link do espelhamento falhou): ficam até alguém dispensar
+      alerts: await prisma.channelSource.findMany({
+        where: { alert: { not: null } },
+        orderBy: { alertAt: 'desc' },
+        take: 10,
+        select: { id: true, kind: true, label: true, alert: true, alertAt: true, alertCount: true, channel: { select: { id: true, name: true } } },
+      }),
     };
   });
 

@@ -22,7 +22,7 @@ npm run dev:web               # :3000 — site em /, painel em /admin
 - Cada pessoa tem o próprio login (perfil DEV ou GERENTE). DEV cria usuários em **Administração → Usuários**;
   o sistema gera uma senha provisória (mostrada uma vez) e a pessoa troca no 1º acesso.
 - Esqueceu a senha? Um DEV gera nova provisória na tela de Usuários, ou pelo terminal:
-  `docker compose exec api npm run admin:create -- --email pessoa@x.com --reset`
+  `docker compose exec api npm run admin:create -w @cupons/api -- --email pessoa@x.com --reset`
 - Conta bloqueada (5 senhas erradas): espera 15 min ou um DEV gera nova provisória.
 
 ## Grupos por categoria
@@ -54,8 +54,21 @@ npm run dev:web               # :3000 — site em /, painel em /admin
 ### Conectar a conta que lê outros grupos (uma vez)
 1. Conta/chip **dedicado** (não o pessoal). Entre nos grupos privados que quiser usar como fonte.
 2. my.telegram.org → API development tools → `TELEGRAM_API_ID` e `TELEGRAM_API_HASH` no `.env`.
-3. `docker compose exec -it worker npm run telegram:login` → telefone, código, 2FA → copie `TELEGRAM_USER_SESSION` para o `.env`.
+3. `docker compose exec -it worker npm run telegram:login -w @cupons/worker` → telefone, código, 2FA → copie `TELEGRAM_USER_SESSION` para o `.env`.
 4. `docker compose up -d --force-recreate worker api`.
+
+## Espelhamento de grupo
+
+Nota completa: [[10 - Espelhamento Mercado Livre]]. Resumo:
+1. Conta dedicada do Telegram conectada (acima) e **membro** do grupo observado.
+2. `npm run ml:login` **na sua máquina**: abre o Google Chrome comum (perfil separado); entre na conta de afiliado.
+   Sessão → `data/linker/`. Se o ML disser "limite de tentativas", **pare** e tente de novo horas depois.
+3. Conferir: `docker compose exec linker npm run ml:check -w @cupons/linker -- --sessao` (e `-- <meli.la> --gerar`).
+4. Canais → canal de destino → **Espelhar grupo** → grupo, "Mercado Livre", atraso, silêncio → Salvar.
+   O interruptor **Ativo/Desligado** do card liga/desliga; religar começa da próxima mensagem.
+- Alerta vermelho no card/Visão geral = conversão falhou (motivo no texto). Resolva e clique **Dispensar**.
+- Sessão do ML expira de tempos em tempos: o card avisa "sessão expirou" → rode `npm run ml:login` de novo.
+- Prints das falhas: `data/linker/debug/` (PNG + HTML, os 40 mais recentes). Logs: `docker compose logs -f linker`.
 
 ## Uso diário
 
@@ -93,3 +106,10 @@ Mínimo para lançar (detalhes em [[08 - Segurança#Checklist de lançamento]]):
 | API/painel no Docker: `Can't reach database server at postgres:5432` | Container criado num `up` que falhou (porta ocupada) ficou **sem rede** | Libere a porta e rode `docker compose up -d --force-recreate --no-deps api web` |
 | Build do Docker trava em `apt-get` / "Temporary failure resolving" | DNS do host é `systemd-resolved` (127.0.0.53), inalcançável dos containers (comum no Fedora) | Já tratado no compose: build com `network: host` e `dns: [1.1.1.1, 8.8.8.8]` nos serviços |
 | Página 500 "Can't resolve './types.js'" | Webpack sem `extensionAlias` | Já corrigido no `next.config.ts` — não remova |
+| Espelhamento: "Conta dedicada do Telegram não conectada" | `TELEGRAM_API_ID/HASH/USER_SESSION` vazios | Ver "Conectar a conta que lê outros grupos" |
+| Espelhamento: "Sem login"/"sessão expirou" no Mercado Livre | Falta `data/linker/mercadolivre-state.json` ou cookies vencidos | `npm run ml:login` na sua máquina |
+| Espelhamento: "Conversor fora do ar" | Container `linker` parado/caído | `docker compose up -d linker`; `docker compose logs linker` |
+| Espelhamento: "campo textarea#url-0 não apareceu" / "link curto não apareceu" | ML mudou o gerador | Ver o print em `data/linker/debug/`, ajustar `SELECTORS` em `apps/linker/src/mercadolivre.ts` |
+| Espelhamento: "vitrine do afiliado, sem um produto em destaque" | O `meli.la` do grupo era de perfil, não de produto | Normal; nada a fazer (dispense o alerta) |
+| `ml:login`: "limite de tentativas" | Antifraude do ML (tentativas seguidas ou janela de automação) | Parar, esperar algumas horas; o `ml:login` atual usa o Chrome comum (sem automação) |
+| Espelhamento: "Não consegui ler o grupo …" | Conta dedicada não é membro, @ errado ou ID sem cache | Entrar no grupo com a conta; preferir `@usuario` |

@@ -8,6 +8,8 @@
 | `TELEGRAM_BOT_TOKEN` | Controle total do bot e do canal |
 | Credenciais de afiliado | Links com o tracking de outra pessoa, perda de comissão |
 | Redirector `/c/` | Cliques falsos distorcem métricas; abuso de carga |
+| `data/linker/mercadolivre-state.json` e `data/linker/chrome-profile/` | **Acesso à conta de afiliado do ML** (cookies da sessão; o perfil do Chrome guarda o login — use só para o ML) |
+| `TELEGRAM_USER_SESSION` | Acesso à conta dedicada do Telegram |
 
 ## Acesso ao painel (por usuário)
 
@@ -48,6 +50,15 @@
 - Guard de auth da API decide pelo **padrão da rota casada**, nunca pelo texto da URL (`/%61pi/...` burlava).
 - Portas de Postgres, Redis e API publicadas só em `127.0.0.1`; o web fala com a API pela rede do Docker.
 - Painel atrás de proxy: `TRUST_PROXY_HOPS` = nº de proxies, senão o IP do limite de login pode ser forjado.
+
+**Espelhamento / linker** ([[10 - Espelhamento Mercado Livre]])
+- Sessão do ML em `data/linker/` (fora do git e do contexto do Docker build), arquivo `600`, pasta `700`; gravação atômica.
+  Só é regravada se já existia (não salva cookies anônimos como se fossem login).
+- Links vêm de grupos de terceiros: o ouvinte só aceita host `meli.la`; o navegador bloqueia qualquer requisição para
+  rede interna (`localhost`, nomes sem ponto como `api`/`postgres`, IPs privados, `169.254.x`, IPv6 literal) e o
+  destino tem que ser domínio do ML. Texto/imagem do grupo nunca vão para o nosso post.
+- Prints de falha podem mostrar dados da conta de afiliado: ficam em `data/linker/debug/` (fora do git), só os 40 últimos.
+- Risco de regra do ML (automação do portal de afiliados) — aceito pelo dono; ver a nota 10.
 
 ## Riscos aceitos (por enquanto)
 

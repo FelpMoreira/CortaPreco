@@ -204,14 +204,26 @@ model ChannelSource {
   id            String    @id @default(cuid())
   channel       Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
   channelId     String
-  kind          String    // API | TELEGRAM
+  kind          String    // API | TELEGRAM | MIRROR (espelha um grupo do Telegram, ver cofre/10)
   label         String
   enabled       Boolean   @default(true)
   stores        String[]  @default([]) // API: ALIEXPRESS, SHOPEE, AMAZON
   keywords      String[]  @default([]) // termos de busca (API) / termos que o título deve ter (filtro)
   promos        String[]  @default([]) // promoções em destaque do AliExpress (trechos do nome)
-  telegramChat  String?   // TELEGRAM: @canal ou id
-  lastMessageId BigInt?   // TELEGRAM: última mensagem lida
+  telegramChat  String?   // TELEGRAM/MIRROR: @canal ou id do grupo observado
+  lastMessageId BigInt?   // TELEGRAM/MIRROR: última mensagem lida
+  /// MIRROR: nome do grupo observado, preenchido pelo worker ao conectar (mostrado no painel)
+  chatTitle     String?
+  /// MIRROR: tipos de link convertidos (MERCADOLIVRE); o resto da mensagem é ignorado
+  linkTypes     String[]  @default([])
+  /// MIRROR: atraso aleatório de 0 até isto (segundos) contado da mensagem original
+  maxDelaySec   Int       @default(150)
+  /// MIRROR: não posta durante o silêncio de madrugada do canal
+  respectQuiet  Boolean   @default(true)
+  /// Alerta para o painel (ex.: conversão do link falhou). Fica até alguém dispensar.
+  alert         String?
+  alertAt       DateTime?
+  alertCount    Int       @default(0)
   minDiscount   Int       @default(0)
   minRating     Decimal?  @db.Decimal(3, 2)
   minPrice      Decimal?  @db.Decimal(10, 2)
@@ -228,8 +240,34 @@ model ChannelSource {
   updatedAt     DateTime  @updatedAt
   suggestions   Suggestion[]
   seenLinks     SeenLink[]
+  events        SourceEvent[]
 
   @@index([channelId])
+}
+
+// Histórico do espelhamento: cada mensagem do grupo observado que tinha link tratável.
+model SourceEvent {
+  id           String        @id @default(cuid())
+  source       ChannelSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId     String
+  messageId    BigInt?
+  /// link como veio na mensagem (ex.: https://meli.la/abc)
+  link         String
+  linkType     String
+  /// URL do produto sem query/hash e o nosso link de afiliado gerado
+  productUrl   String?
+  affiliateUrl String?
+  /// PENDING (na fila do conversor) | CONVERTED (post criado) | FAILED | SKIPPED
+  status       String        @default("PENDING")
+  detail       String?
+  postId       String?
+  /// quando o post deve sair (mensagem original + atraso aleatório)
+  postAt       DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([sourceId, createdAt])
+  @@index([status])
 }
 
 // Link já visto numa fonte do Telegram: não reprocessa.

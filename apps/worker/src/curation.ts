@@ -145,6 +145,8 @@ async function discover() {
 export async function runSource(sourceId: string): Promise<Record<string, unknown>> {
   const source = await loadSource(sourceId);
   if (!source) return { error: 'fonte não existe' };
+  // espelhamento não gera sugestões: roda em tempo real no ouvinte (mirror.ts) + linker
+  if (source.kind === 'MIRROR') return { aviso: 'espelhamento roda em tempo real, não por rodada' };
   const started = new Date();
   let summary: Record<string, unknown>;
   try {
@@ -308,7 +310,7 @@ const loadSource = (id: string) => prisma.channelSource.findUnique({ where: { id
 /** Enfileira as fontes ativas cuja vez chegou (lastRunAt + intervalo). */
 async function tickSources(): Promise<{ queued: number }> {
   const sources = await prisma.channelSource.findMany({
-    where: { enabled: true, channel: { enabled: true } },
+    where: { enabled: true, kind: { in: ['API', 'TELEGRAM'] }, channel: { enabled: true } },
     select: { id: true, channelId: true, lastRunAt: true, intervalMin: true, autoApprove: true, autoMinScore: true },
   });
   const now = Date.now();

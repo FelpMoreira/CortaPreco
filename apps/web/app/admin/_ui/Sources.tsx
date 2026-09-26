@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LuPlay, LuPlus, LuSave, LuSend, LuStore, LuX } from 'react-icons/lu';
+import { LuPlay, LuPlus, LuRepeat2, LuSave, LuSend, LuStore, LuX } from 'react-icons/lu';
 import { adminFetch, fmtDate, type Notify } from './common';
+import { MirrorCard, MirrorFormFields, type MirrorPresets } from './Mirror';
 
 export interface SourceRow {
   id: string;
-  kind: 'API' | 'TELEGRAM';
+  kind: 'API' | 'TELEGRAM' | 'MIRROR';
   label: string;
   enabled: boolean;
   stores: string[];
@@ -22,6 +23,14 @@ export interface SourceRow {
   intervalMin: number;
   autoApprove: boolean;
   autoMinScore: number;
+  // espelhamento (MIRROR)
+  chatTitle: string | null;
+  linkTypes: string[];
+  maxDelaySec: number;
+  respectQuiet: boolean;
+  alert: string | null;
+  alertAt: string | null;
+  alertCount: number;
   lastRunAt: string | null;
   lastResult: string | null;
 }
@@ -31,6 +40,7 @@ export interface Presets {
   promos: string[];
   stores: Record<'ALIEXPRESS' | 'SHOPEE' | 'AMAZON', boolean>;
   telegramReader: boolean;
+  mirror: MirrorPresets;
 }
 
 const STORE_NAME: Record<string, string> = { ALIEXPRESS: 'AliExpress', SHOPEE: 'Shopee', AMAZON: 'Amazon' };
@@ -69,7 +79,7 @@ function ChipsInput({ value, onChange, placeholder }: { value: string[]; onChang
   );
 }
 
-type Draft = Omit<SourceRow, 'id' | 'lastRunAt' | 'lastResult' | 'enabled'>;
+type Draft = Omit<SourceRow, 'id' | 'lastRunAt' | 'lastResult' | 'enabled' | 'chatTitle' | 'alert' | 'alertAt' | 'alertCount'>;
 
 function SourceForm({
   initial,
@@ -97,6 +107,17 @@ function SourceForm({
         onSave(d);
       }}
     >
+      {d.kind === 'MIRROR' && (
+        <>
+          <label className="field">
+            <span>Nome do fluxo</span>
+            <input className="input" value={d.label} onChange={(e) => setD({ ...d, label: e.target.value })} required minLength={2} maxLength={60} />
+          </label>
+          <MirrorFormFields d={d} setD={setD} presets={presets.mirror} />
+        </>
+      )}
+      {d.kind !== 'MIRROR' && (
+      <>
       <div className="grid cols-2" style={{ gap: 12 }}>
         <label className="field">
           <span>Nome da fonte</span>
@@ -224,6 +245,14 @@ function SourceForm({
       <p className="muted" style={{ margin: 0 }}>
         Só usamos o link do produto: texto, imagem e link de afiliado da oferta são sempre nossos.
       </p>
+      </>
+      )}
+      {d.kind === 'MIRROR' && !presets.telegramReader && (
+        <p className="warn" style={{ margin: 0, fontSize: 13 }}>
+          Para observar o grupo falta conectar a conta dedicada do Telegram (npm run telegram:login). O fluxo fica salvo e
+          começa sozinho quando a conta for conectada.
+        </p>
+      )}
       <div className="row">
         <button className="btn sm" disabled={busy}>
           <LuSave size={14} /> Salvar fonte
@@ -240,6 +269,8 @@ function SourceForm({
 export function ChannelSources({
   channelId,
   categories,
+  platform,
+  quietHours,
   sources,
   canEdit,
   notify,
@@ -247,27 +278,31 @@ export function ChannelSources({
 }: {
   channelId: string;
   categories: string[];
+  platform: string;
+  quietHours: string;
   sources: SourceRow[];
   canEdit: boolean;
   notify: Notify;
   onChanged: () => void;
 }) {
   const [presets, setPresets] = useState<Presets | null>(null);
-  const [editing, setEditing] = useState<string | 'new-api' | 'new-tg' | null>(null);
+  const [editing, setEditing] = useState<string | 'new-api' | 'new-tg' | 'new-mirror' | null>(null);
   const [busy, setBusy] = useState(false);
+  const hasMirror = sources.some((s) => s.kind === 'MIRROR');
 
+  // presets também trazem a saúde do espelhamento (ouvinte/conversor): recarrega junto com o canal
   useEffect(() => {
-    if (editing && !presets) adminFetch<Presets>('sources/presets').then(setPresets).catch((e: Error) => notify('error', e.message));
-  }, [editing, presets, notify]);
+    if (editing || hasMirror) adminFetch<Presets>('sources/presets').then(setPresets).catch((e: Error) => notify('error', e.message));
+  }, [editing, hasMirror, sources, notify]);
 
-  const blank = (kind: 'API' | 'TELEGRAM'): Draft => ({
+  const blank = (kind: 'API' | 'TELEGRAM' | 'MIRROR'): Draft => ({
     kind,
-    label: kind === 'API' ? 'APIs oficiais' : 'Grupo do Telegram',
+    label: kind === 'API' ? 'APIs oficiais' : kind === 'MIRROR' ? 'Espelhamento Mercado Livre' : 'Grupo do Telegram',
     stores: kind === 'API' && presets?.stores.ALIEXPRESS ? ['ALIEXPRESS'] : [],
     // termos prontos das categorias do canal (editáveis)
     keywords: kind === 'API' ? [...new Set(categories.flatMap((c) => presets?.searchTerms[c] ?? []))] : [],
     promos: [],
-    telegramChat: kind === 'TELEGRAM' ? '' : null,
+    telegramChat: kind === 'API' ? null : '',
     minDiscount: kind === 'API' ? 15 : 0,
     minRating: kind === 'API' ? '4.5' : null,
     minPrice: null,
@@ -277,12 +312,22 @@ export function ChannelSources({
     intervalMin: kind === 'API' ? 120 : 30,
     autoApprove: false,
     autoMinScore: 70,
+    linkTypes: kind === 'MIRROR' ? ['MERCADOLIVRE'] : [],
+    maxDelaySec: presets?.mirror.defaultMaxDelaySec ?? 150,
+    respectQuiet: true,
   });
 
   async function save(id: string | null, d: Draft) {
     setBusy(true);
     try {
-      const body = {
+      const body = d.kind === 'MIRROR' ? {
+        label: d.label,
+        kind: d.kind,
+        telegramChat: d.telegramChat,
+        linkTypes: d.linkTypes,
+        maxDelaySec: d.maxDelaySec,
+        respectQuiet: d.respectQuiet,
+      } : {
         label: d.label,
         kind: d.kind,
         stores: d.stores,
@@ -337,6 +382,11 @@ export function ChannelSources({
             <button className="btn ghost sm" onClick={() => setEditing('new-tg')}>
               <LuSend size={13} /> Grupo do Telegram
             </button>
+            {platform === 'TELEGRAM' && (
+              <button className="btn ghost sm" onClick={() => setEditing('new-mirror')} title="Observa um grupo e reposta as ofertas com o nosso link">
+                <LuRepeat2 size={13} /> Espelhar grupo
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -350,6 +400,17 @@ export function ChannelSources({
       {sources.map((s) =>
         editing === s.id && presets ? (
           <SourceForm key={s.id} initial={s} presets={presets} busy={busy} onSave={(d) => void save(s.id, d)} onCancel={() => setEditing(null)} />
+        ) : s.kind === 'MIRROR' ? (
+          <MirrorCard
+            key={s.id}
+            s={s}
+            presets={presets?.mirror ?? null}
+            canEdit={canEdit}
+            quietHours={quietHours}
+            notify={notify}
+            onEdit={() => setEditing(s.id)}
+            onChanged={onChanged}
+          />
         ) : (
           <div key={s.id} className="spread" style={{ alignItems: 'flex-start', opacity: s.enabled ? 1 : 0.55 }}>
             <div style={{ minWidth: 0, display: 'grid', gap: 3 }}>
@@ -392,10 +453,10 @@ export function ChannelSources({
         ),
       )}
 
-      {(editing === 'new-api' || editing === 'new-tg') &&
+      {(editing === 'new-api' || editing === 'new-tg' || editing === 'new-mirror') &&
         (presets ? (
           <SourceForm
-            initial={blank(editing === 'new-api' ? 'API' : 'TELEGRAM')}
+            initial={blank(editing === 'new-api' ? 'API' : editing === 'new-mirror' ? 'MIRROR' : 'TELEGRAM')}
             presets={presets}
             busy={busy}
             onSave={(d) => void save(null, d)}

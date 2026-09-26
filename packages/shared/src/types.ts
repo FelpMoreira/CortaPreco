@@ -1,4 +1,4 @@
-export const STORES = ['SHOPEE', 'ALIEXPRESS', 'AMAZON'] as const;
+export const STORES = ['SHOPEE', 'ALIEXPRESS', 'AMAZON', 'MERCADOLIVRE'] as const;
 export type Store = (typeof STORES)[number];
 
 export const PRODUCT_STATUSES = ['NEW', 'READY', 'FILTERED', 'EXPIRED'] as const;

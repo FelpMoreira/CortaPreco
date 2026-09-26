@@ -1,0 +1,25 @@
+{
+  "name": "@cupons/linker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "ml:login": "tsx scripts/ml-login.ts",
+    "ml:check": "tsx scripts/ml-check.ts"
+  },
+  "dependencies": {
+    "@cupons/db": "*",
+    "@cupons/shared": "*",
+    "bullmq": "^5.12.0",
+    "playwright": "1.63.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

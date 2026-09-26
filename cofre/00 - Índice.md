@@ -10,6 +10,12 @@ Repo: `FelpMoreira/CortaPreco` · pasta local `cupons/`.
 - **Bloqueia o lançamento:** segredos fracos no `.env`, domínio público/HTTPS, credenciais Shopee e AliExpress.
   Ver [[08 - Segurança#Checklist de lançamento]].
 
+## Estado em 2026-09-25
+
+- Postagem automática por fonte (busca quando a fila acaba), fila por nota, preço conferido antes de postar (D22, D23).
+- **Espelhamento de grupo (Mercado Livre)** pronto e testado sem as contas; para ligar faltam a conta dedicada do
+  Telegram e o `npm run ml:login` da conta de afiliado. Ver [[10 - Espelhamento Mercado Livre]].
+
 ## Notas
 
 | # | Nota | Para quê |
@@ -23,6 +29,7 @@ Repo: `FelpMoreira/CortaPreco` · pasta local `cupons/`.
 | 07 | [[07 - Operação]] | Rodar, deploy, problemas comuns |
 | 08 | [[08 - Segurança]] | Controles e checklist de lançamento |
 | 09 | [[09 - API]] | Contrato das rotas |
+| 10 | [[10 - Espelhamento Mercado Livre]] | Observar grupo do Telegram e repostar ofertas do ML com o nosso link |
 
 ## Regras do cofre
 

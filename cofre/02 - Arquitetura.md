@@ -21,8 +21,9 @@ Monorepo npm workspaces, TypeScript estrito, Node 20+. Etapas desacopladas por f
 | App/pacote | Papel | Arquivos-chave |
 |-----------|-------|----------------|
 | `apps/api` | Fastify: preview, produtos, posts, métricas, catálogo público, redirector `/c/` | `server.ts` (rotas + auth), `services/deals.ts` (regras) |
-| `apps/worker` | Scheduler (tick 60s) + worker de envio ao Telegram | `scheduler.ts`, `worker.ts`, `sender.ts` |
+| `apps/worker` | Scheduler (tick 60s) + envio + curadoria/fontes + ouvinte do espelhamento | `scheduler.ts`, `worker.ts`, `curation.ts`, `mirror.ts`, `telegramReader.ts` |
 | `apps/bot` | grammY: `/start`, `/whoami`, `/stats`, `/channel` | `index.ts` |
+| `apps/linker` | Navegador (Playwright/Chromium) logado na conta de afiliado do ML: converte links do espelhamento | `mercadolivre.ts`, `mirror.ts`, `browser.ts` — ver [[10 - Espelhamento Mercado Livre]] |
 | `apps/web` | Next.js: painel `/admin` + site público `/` | `middleware.ts` (sessão + CSRF), `app/api/admin/[...path]` (proxy), `app/admin/_ui/*` |
 | `packages/affiliates` | Providers Shopee/AliExpress/Amazon, interface única | `types.ts` (`AffiliateProvider`) |
 | `packages/shared` | Tipos + template da mensagem | `template.ts` (`LINK_PLACEHOLDER`) |
@@ -71,3 +72,24 @@ CANCELED ──reenviar──► SCHEDULED
 
 `Product.tenantId` já existe; o MVP usa `'default'` (nunca null — NULL em índice único do Postgres quebra o dedup).
 No SaaS: credenciais e providers por tenant, mesma pipeline.
+
+## Filas (BullMQ)
+
+| Fila | Quem põe | Quem consome | Para quê |
+|------|----------|--------------|----------|
+| `publish` | scheduler, "postar agora", linker (com `delay`) | worker `worker.ts` | enviar um post (confere o preço antes, D23) |
+| `curate` | API (lote, descoberta, fonte "rodar agora"), `sources-tick` a cada 2 min | worker `curation.ts` | buscar produtos e criar sugestões |
+| `mirror` | worker `mirror.ts` (mensagem do grupo com `meli.la`) | linker | converter o link no navegador e agendar o post |
+
+## Espelhamento (resumo)
+
+`grupo observado → [worker] ouvinte (conta dedicada do Telegram) → fila mirror → [linker] navegador logado no ML
+(card do produto + gerador de links) → Post POSTING + publish com atraso 0–150 s → canal`.
+Falha → alerta no canal (painel). Detalhes, seletores e testes: [[10 - Espelhamento Mercado Livre]].
+
+## Serviços no Docker
+
+`postgres`, `redis`, `db-init` (db push), `api`, `web`, `worker`, `bot` usam a imagem `cupons-app:dev` (alvo `app` do
+Dockerfile). O `linker` usa `cupons-linker:dev` (alvo `linker` = mesma base + Chromium do Playwright), `shm_size: 1gb`
+e o volume `./data/linker` (sessão do ML e prints de falha, fora do git).
+

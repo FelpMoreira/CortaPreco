@@ -64,6 +64,7 @@ const STORES = [
   { key: 'SHOPEE', slug: 'shopee', name: 'Shopee', cls: 'shopee' },
   { key: 'ALIEXPRESS', slug: 'aliexpress', name: 'AliExpress', cls: 'ali' },
   { key: 'AMAZON', slug: 'amazon', name: 'Amazon', cls: 'amazon' },
+  { key: 'MERCADOLIVRE', slug: 'mercadolivre', name: 'Mercado Livre', cls: 'meli' },
 ] as const;
 const STORE_NAME: Record<string, string> = Object.fromEntries(STORES.map((s) => [s.key, s.name]));
 
@@ -117,7 +118,7 @@ const FAQ: [string, string][] = [
   ],
   [
     'Comprar pelos links é seguro?',
-    'O link leva direto para a página oficial do produto na Shopee, AliExpress ou Amazon. A compra, o pagamento e a entrega são feitos pela própria loja, com as garantias dela.',
+    'O link leva direto para a página oficial do produto na Shopee, AliExpress, Amazon ou Mercado Livre. A compra, o pagamento e a entrega são feitos pela própria loja, com as garantias dela.',
   ],
 ];
 

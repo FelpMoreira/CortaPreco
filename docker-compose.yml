@@ -138,6 +138,40 @@ services:
       db-init:
         condition: service_completed_successfully
 
+  # Conversor do espelhamento (cofre/10): navegador logado na conta de afiliado do Mercado Livre.
+  # A sessão fica em ./data/linker (gerada no host por `npm run ml:login`, que precisa de tela).
+  linker:
+    image: cupons-linker:dev
+    build:
+      context: .
+      target: linker
+      # build usa a rede do host: em Fedora (systemd-resolved) o DNS do bridge não resolve
+      network: host
+    # DNS explícito: o 127.0.0.53 do host não é alcançável de dentro dos containers
+    dns: [1.1.1.1, 8.8.8.8]
+    container_name: cupons-linker
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://cupons:cupons@postgres:5432/cupons?schema=public
+      REDIS_URL: redis://redis:6379
+      LINKER_DATA_DIR: /app/data/linker
+    volumes:
+      - ./data/linker:/app/data/linker
+    # o Chromium usa /dev/shm; os 64 MB padrão derrubam abas pesadas
+    shm_size: 1gb
+    command: ["npm", "run", "dev", "-w", "@cupons/linker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+
   bot:
     image: cupons-app:dev
     build:

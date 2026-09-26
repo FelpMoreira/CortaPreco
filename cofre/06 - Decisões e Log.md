@@ -27,6 +27,7 @@
 | D21 | Fontes por canal | Cada canal escolhe as fontes: **APIs oficiais** (lojas + termos prontos por categoria, editáveis + filtros) ou **outros grupos do Telegram** (conta de usuário dedicada, só leitura). Sugestão nasce com destino; o geral só recebe nicho com nota ≥ limiar (80). **1 bot posta tudo** | Grupo de nicho precisa de garimpo de nicho; bot não lê canais de terceiros; organização vem dos canais/filas, não do nº de bots |
 | D22 | Modo automático | **Por fonte**: "Postar automaticamente" + nota mínima (padrão 70). A API aprova a cada 1 min o que passar; freio de 8 posts na fila por canal e sugestão com mais de 12h não vai sozinha | Tira o gargalo da aprovação sem abrir mão do controle: dá para ligar só na fonte em que se confia; ritmo/silêncio seguem no scheduler |
 | D23 | Fila por qualidade | A fila sai pela **nota** (agendado à mão = 100, vai primeiro); post automático que passa 24h sem sair expira. **Preço conferido na loja antes de postar** (AliExpress via API): subiu > 2% ou sumiu → cancela; mudou pouco/caiu → sai com o valor de agora. Sem limite de tamanho de fila | O risco não é fila grande, é oferta velha; conferir na hora resolve na raiz e deixa a fila crescer à vontade |
+| D24 | Espelhamento de grupo | Fonte `MIRROR` por canal: conta dedicada do Telegram **ouve** o grupo; 1º link `meli.la` de cada mensagem vai para o **linker** (serviço novo com navegador logado na conta de afiliado do ML) que pega o produto do card em destaque, gera o nosso link no gerador e posta com atraso 0–150 s da mensagem original. Falha → alerta no canal. Só Telegram, sem fila/ritmo, respeita silêncio, ignora repetido em 24h | Pedido do usuário; o ML não tem API de link de afiliado para isso, então é navegador. Dados do card (não da página do produto, que cai em verificação anti-robô sem login). Serviço separado para o Chromium não pesar/derrubar o worker |
 
 ## Log
 
@@ -106,6 +107,21 @@
 - **2026-09-25** — fila por nota + conferência de preço antes de postar (D23); limites de 8 na fila removidos.
   Testado com a API real: mesmo preço → posta; subiu 20% → cancela; caiu → posta com o preço novo; item inexistente → cancela.
   API fora do ar: post com < 3h sai assim mesmo; mais velho volta para a fila e desiste na 3ª falha.
+- **2026-09-25** — espelhamento de grupo com links do Mercado Livre (D24, nota [[10 - Espelhamento Mercado Livre]]).
+  Investigado nas páginas reais: `meli.la` → `/social/<afiliado>` com card em destaque; sem login o "Ir para produto"
+  tem `href`; há `meli.la` de vitrine (sem produto); página do produto anônima cai em `/gz/account-verification`;
+  gerador sem sessão cai em `/login/identification` (detecção corrigida durante o teste). Pegadinha: `tsx` injeta
+  `__name` em `page.evaluate` (contorno `NAME_SHIM`). Serviço `linker` (Playwright 1.63, Chromium no alvo `linker` do
+  Dockerfile). Loja `MERCADOLIVRE` nova ("ACHADO NO MERCADO LIVRE"). Testes: 9 produtos reais, filtro de links (8),
+  login (6), falha ponta a ponta (alerta no painel), post com atraso (saiu em 20:09:50.075 para 20:09:50.002), regras da
+  API. Falta: conta dedicada do Telegram e `ml:login` para o primeiro teste real.
+- **2026-09-26** — `ml:login` deu "limite de tentativas" no ML: a janela era controlada pelo Playwright (detectável).
+  Refeito: abre o Google Chrome comum (perfil `data/linker/chrome-profile`, porta de depuração local), não toca na
+  página durante o login e só copia cookies + User-Agent quando o gerador aparece. Linker passa a usar esse UA.
+  Detalhes em [[10 - Espelhamento Mercado Livre#Incidente: "limite de tentativas" no login (2026-09-26)]].
+- **2026-09-26** — conta do Telegram conectada; `ml:login` ok. 1ª conversão real: o "Gerar" só habilita **digitando**
+  a URL (colar deixa desabilitado) — corrigido. `meli.la/12hnEiy` → `meli.la/2zFYfUp` com a nossa etiqueta
+  (`<nossa etiqueta>`). ML pede validação de identidade da conta de afiliado em até 96 dias.
 
 ## Regras de ouro
 

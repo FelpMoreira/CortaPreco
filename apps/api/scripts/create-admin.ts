@@ -3,7 +3,7 @@
  * A senha aparece UMA vez aqui; no banco fica só o hash, e a troca é obrigatória no 1º login.
  *
  *   npm run admin:create -w @cupons/api -- --email voce@exemplo.com --name "Seu Nome" [--role DEV|GERENTE] [--reset]
- *   (no Docker: docker compose exec api npm run admin:create -- --email ... --name ...)
+ *   (no Docker: docker compose exec api npm run admin:create -w @cupons/api -- --email ... --name ...)
  */
 import '../src/env.js';
 import { parseArgs } from 'node:util';

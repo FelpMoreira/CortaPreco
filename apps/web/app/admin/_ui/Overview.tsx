@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  LuBellOff,
   LuCalendarClock,
   LuLayoutDashboard,
   LuListOrdered,
@@ -26,9 +27,18 @@ interface OverviewData {
     product: { title: string; store: string; imageUrl: string | null };
     _count: { clicks: number };
   }[];
+  alerts: {
+    id: string;
+    kind: string;
+    label: string;
+    alert: string;
+    alertAt: string | null;
+    alertCount: number;
+    channel: { id: string; name: string };
+  }[];
 }
 
-export function OverviewTab({ notify, onGo }: { notify: Notify; onGo: (tab: 'sugestoes' | 'posts' | 'nova') => void }) {
+export function OverviewTab({ notify, onGo }: { notify: Notify; onGo: (tab: 'sugestoes' | 'posts' | 'nova' | 'canais') => void }) {
   const [data, setData] = useState<OverviewData | null>(null);
 
   const load = useCallback(async () => {
@@ -45,6 +55,15 @@ export function OverviewTab({ notify, onGo }: { notify: Notify; onGo: (tab: 'sug
     const t = setInterval(() => document.visibilityState === 'visible' && void load(), 30_000);
     return () => clearInterval(t);
   }, [load]);
+
+  async function dismissAlert(sourceId: string) {
+    try {
+      await adminFetch(`sources/${sourceId}/dismiss-alert`, { method: 'POST' });
+      await load();
+    } catch (e) {
+      notify('error', (e as Error).message);
+    }
+  }
 
   const s = data?.stats;
 
@@ -84,6 +103,27 @@ export function OverviewTab({ notify, onGo }: { notify: Notify; onGo: (tab: 'sug
           />
         </div>
       )}
+
+      {data?.alerts?.map((a) => (
+        <div key={a.id} className="alert-box" role="alert">
+          <LuTriangleAlert size={16} style={{ flex: 'none', marginTop: 1 }} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <strong>
+              {a.channel.name} · {a.label}: {a.alert}
+            </strong>
+            <div className="muted" style={{ fontSize: 12 }}>
+              {a.alertAt ? fmtDate(a.alertAt) : ''}
+              {a.alertCount > 1 ? ` · ${a.alertCount} ocorrências` : ''}
+            </div>
+          </div>
+          <button className="btn ghost sm" onClick={() => onGo('canais')}>
+            Ver no canal
+          </button>
+          <button className="btn ghost sm" onClick={() => void dismissAlert(a.id)} title="Some do painel; o histórico continua">
+            <LuBellOff size={13} /> Dispensar
+          </button>
+        </div>
+      ))}
 
       {data?.channels.map((c) => <QueueBanner key={c.id} channel={c} />)}
       {data && data.channels.length === 0 && (

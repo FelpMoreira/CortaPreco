@@ -4,6 +4,15 @@ export const STORE_LABELS: Record<Store, string> = {
   SHOPEE: 'Shopee',
   ALIEXPRESS: 'AliExpress',
   AMAZON: 'Amazon',
+  MERCADOLIVRE: 'Mercado Livre',
+};
+
+// "ACHADO NA AMAZON" / "ACHADO NO MERCADO LIVRE"
+const storeArticle: Record<Store, 'NA' | 'NO'> = {
+  SHOPEE: 'NA',
+  ALIEXPRESS: 'NA',
+  AMAZON: 'NA',
+  MERCADOLIVRE: 'NO',
 };
 
 const brl = (v: number): string =>
@@ -13,6 +22,7 @@ const storeEmoji: Record<Store, string> = {
   SHOPEE: '🛒',
   ALIEXPRESS: '📦',
   AMAZON: '🛍️',
+  MERCADOLIVRE: '🤝',
 };
 
 const er = (s: string): string =>
@@ -34,7 +44,7 @@ function buildLines(input: MessageInput): string[] {
   const hasDiscount = !!input.oldPrice && input.oldPrice > input.price;
   const store = STORE_LABELS[input.store].toUpperCase();
   // só chama de oferta o que tem desconto de verdade; o resto é "achado"
-  lines.push(`${storeEmoji[input.store]} <b>${hasDiscount ? `OFERTA ${store}` : `ACHADO NA ${store}`}</b>`);
+  lines.push(`${storeEmoji[input.store]} <b>${hasDiscount ? `OFERTA ${store}` : `ACHADO ${storeArticle[input.store]} ${store}`}</b>`);
   lines.push('');
   lines.push(`<b>${er(input.title)}</b>`);
   if (input.hook) lines.push(`<i>${er(input.hook)}</i>`);

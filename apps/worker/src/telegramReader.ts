@@ -17,7 +17,14 @@ export function readerConfigured(): boolean {
   return Boolean(process.env.TELEGRAM_API_ID && process.env.TELEGRAM_API_HASH && process.env.TELEGRAM_USER_SESSION);
 }
 
-async function getClient(): Promise<TelegramClient> {
+/** Avisados a cada cliente novo (reconexão): o espelhamento registra de novo o ouvinte de mensagens. */
+const onNewClient: Array<(c: TelegramClient) => void> = [];
+export function whenClientCreated(cb: (c: TelegramClient) => void): void {
+  onNewClient.push(cb);
+}
+
+/** Cliente único do processo: a mesma sessão em duas conexões simultâneas derruba ambas. */
+export async function getClient(): Promise<TelegramClient> {
   if (client?.connected) return client;
   dialogsLoaded = false;
   client = new TelegramClient(
@@ -30,6 +37,7 @@ async function getClient(): Promise<TelegramClient> {
   client.setLogLevel('error' as never);
   await client.connect();
   if (!(await client.checkAuthorization())) throw new Error('Sessão do Telegram inválida: rode npm run telegram:login de novo');
+  for (const cb of onNewClient) cb(client);
   return client;
 }
 
@@ -63,7 +71,7 @@ export async function resolveLink(url: string): Promise<string> {
  * que começa vazio numa sessão nova. Carregar os diálogos uma vez preenche o cache
  * (a conta precisa ser membro do grupo, o que já é exigido para ler).
  */
-async function entityById(tg: TelegramClient, chat: string) {
+export async function entityById(tg: TelegramClient, chat: string) {
   const id = returnBigInt(chat);
   try {
     return await tg.getInputEntity(id);
