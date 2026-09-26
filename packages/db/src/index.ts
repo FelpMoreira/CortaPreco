@@ -1,6 +1,6 @@
 export { prisma } from './client.js';
 export { upsertProduct, recordPrice, DEFAULT_TENANT, type ProductInput } from './products.js';
-export { syncChannels, channelsFromEnv, dailyCap, type ChannelConfig } from './channels.js';
+export { syncChannels, channelsFromEnv, dailyCap, nicheChannelFor, type ChannelConfig } from './channels.js';
 export { channelPacing, inQuietHours, afterQuietHours, minGapMs, type ChannelPacing, type WaitReason } from './pacing.js';
 export { bestCouponFor, couponLine, couponSavings, markCouponUsed } from './coupons.js';
 export * from '@prisma/client';

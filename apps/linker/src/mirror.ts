@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq';
-import { bestCouponFor, couponLine, inQuietHours, markCouponUsed, prisma, upsertProduct } from '@cupons/db';
-import { escapeHtml, LINK_PLACEHOLDER, renderMessageHtml } from '@cupons/shared';
+import { bestCouponFor, couponLine, inQuietHours, markCouponUsed, nicheChannelFor, prisma, upsertProduct } from '@cupons/db';
+import { classifyCategory, escapeHtml, LINK_PLACEHOLDER, renderMessageHtml } from '@cupons/shared';
 import { withPage } from './browser.js';
 import { config } from './config.js';
 import { convertAmazon } from './amazon.js';
@@ -140,12 +140,33 @@ export async function processMirrorEvent(eventId: string): Promise<void> {
     return finish(eventId, 'SKIPPED', 'conversão terminou tarde demais (oferta velha)', { productUrl: p.productUrl, affiliateUrl });
   }
 
+  // geral "variedades": produto de nicho com grupo próprio vai para o grupo (Channel.routeNiche)
+  let dest: { id: string; platform: string; name: string } = channel;
+  if (channel.categories.length === 0 && channel.routeNiche) {
+    const known = await prisma.product.findFirst({ where: { store: p.store, storeProductId: p.itemId }, select: { category: true } });
+    const niche = await nicheChannelFor(known?.category ?? classifyCategory(p.title), channel.id);
+    if (niche && niche.platform === 'TELEGRAM') {
+      const recent = await prisma.post.findFirst({
+        where: {
+          channelId: niche.id,
+          product: { store: p.store, storeProductId: p.itemId },
+          status: { in: ['SCHEDULED', 'POSTING', 'POSTED'] },
+          createdAt: { gte: new Date(Date.now() - REPOST_WINDOW_MS) },
+        },
+        select: { id: true },
+      });
+      if (recent) return finish(eventId, 'SKIPPED', `produto já postado em ${niche.name} nas últimas 24h`, { productUrl: p.productUrl, affiliateUrl });
+      dest = niche;
+    }
+  }
+
   // espaça do post anterior do canal (rajada do grupo não vira rajada nossa)
-  const slot = await nextSlot(channel.id, postAt, source.minGapSec);
+  const slot = await nextSlot(dest.id, postAt, source.minGapSec);
   if (slot.getTime() - postAt.getTime() > MAX_BACKLOG_MS) {
     return finish(eventId, 'SKIPPED', `muitas ofertas do grupo de uma vez: esta só sairia às ${hhmm(slot)}`, { productUrl: p.productUrl, affiliateUrl });
   }
-  await createMirrorPost({ eventId, sourceId: source.id, channel, product: p, affiliateUrl, postAt: slot, coupon: event.coupon });
+  await createMirrorPost({ eventId, sourceId: source.id, channel: dest, product: p, affiliateUrl, postAt: slot, coupon: event.coupon });
+  if (dest.id !== channel.id) await prisma.sourceEvent.update({ where: { id: eventId }, data: { detail: `post às ${hhmm(slot)} em ${dest.name} (nicho)` } });
 }
 
 /**

@@ -33,7 +33,10 @@ npm run dev:web               # :3000 — site em /, painel em /admin
 4. "Testar" manda uma mensagem de verificação. Canal sem categoria marcada = **geral** (recebe tudo).
 - Prefira **canal** do Telegram (ou supergrupo) já na criação: grupo comum muda de ID quando vira supergrupo
   (histórico visível, link público, muitos membros) e o bot pode perder o cargo de administrador.
-- Cada oferta vai para o geral + os canais da categoria dela. Ajuste a categoria no editor, na sugestão ou em Produtos.
+- Cada oferta vai para os canais da categoria dela. O geral funciona como **variedades** (opção "Oferta de nicho vai só para o
+  grupo do nicho", padrão ligado): o que é de uma categoria com grupo próprio não sai no geral, nem se chegar por uma fonte
+  cadastrada no geral (vai para o grupo). Desligando, volta o modo antigo: geral recebe tudo + nicho com nota ≥ limiar.
+  Ajuste a categoria no editor, na sugestão ou em Produtos.
 
 ## Fontes de ofertas por canal
 

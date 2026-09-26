@@ -82,3 +82,16 @@ export function dailyCap(channel: Pick<Channel, 'postsPerDay' | 'postsPerHour' |
   const target = Number.isFinite(base) ? base : channel.postsPerHour * 15;
   return Math.max(2, Math.ceil((target * (age + 1)) / channel.warmupDays));
 }
+
+/**
+ * Grupo de nicho que cobre a categoria (ex.: "games" → canal Games), para o geral "variedades" não postar
+ * o que tem grupo próprio (Channel.routeNiche). O mais antigo, se houver mais de um.
+ */
+export async function nicheChannelFor(category: string | null | undefined, exceptId?: string): Promise<Channel | null> {
+  if (!category || category === 'outros') return null;
+  return prisma.channel.findFirst({
+    where: { enabled: true, categories: { has: category }, ...(exceptId ? { id: { not: exceptId } } : {}) },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+

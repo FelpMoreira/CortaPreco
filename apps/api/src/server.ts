@@ -518,13 +518,14 @@ export function buildServer(): FastifyInstance {
       jitterPct: { type: 'integer', minimum: 0, maximum: 80 },
       warmupDays: { type: 'integer', minimum: 0, maximum: 60 },
       generalMinScore: { type: 'integer', minimum: 0, maximum: 101 },
+      routeNiche: { type: 'boolean' },
       enabled: { type: 'boolean' },
     },
   } as const;
   type ChannelInput = {
     name?: string; platform?: 'TELEGRAM' | 'WHATSAPP'; target?: string; categories?: string[];
     postsPerHour?: number; postsPerDay?: number; quietHours?: string; jitterPct?: number; warmupDays?: number;
-    generalMinScore?: number; enabled?: boolean;
+    generalMinScore?: number; routeNiche?: boolean; enabled?: boolean;
   };
 
   app.get('/api/channels', async () => {

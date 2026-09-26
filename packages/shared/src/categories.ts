@@ -3,7 +3,9 @@
  * O classificador por palavra-chave dá o primeiro palpite; o admin confirma ou troca no painel.
  */
 export const CATEGORIES = [
-  { slug: 'games', label: 'Games', words: ['ps5', 'ps4', 'playstation', 'xbox', 'nintendo', 'switch', 'dualsense', 'controle sem fio', 'joystick', 'gamer', 'game', 'jogo', 'headset gamer', 'console', 'steam'] },
+  { slug: 'games', label: 'Games', words: ['ps5', 'ps4', 'playstation', 'xbox', 'nintendo', 'switch', 'dualsense', 'controle sem fio', 'joystick', 'gamer', 'gaming', 'game', 'jogo', 'headset gamer', 'console', 'steam',
+    // periféricos e hardware de PC gamer (2026-09-26: "Teclado Mecânico AJAZZ" caía em eletrônicos e ia para o geral)
+    'teclado mecânico', 'teclado mecanico', 'mouse gamer', 'headset', 'mousepad', 'gabinete', 'placa de vídeo', 'placa de video', 'water cooler', 'cadeira gamer', 'controlador de jogo', 'gamepad', 'rtx', 'radeon', 'ryzen'] },
   { slug: 'eletronicos', label: 'Eletrônicos', words: ['fone', 'bluetooth', 'celular', 'smartphone', 'smartwatch', 'relógio inteligente', 'carregador', 'cabo usb', 'usb-c', 'notebook', 'mouse', 'teclado', 'monitor', 'câmera', 'camera', 'tablet', 'echo dot', 'alexa', 'caixa de som', 'pilha', 'filtro de linha', 'ssd', 'pendrive', 'webcam', 'tv ', 'projetor', 'drone', 'powerbank', 'power bank'] },
   { slug: 'casa', label: 'Casa e cozinha', words: ['cozinha', 'panela', 'liquidificador', 'air fryer', 'fritadeira', 'sanduicheira', 'chaleira', 'cafeteira', 'organizador', 'detergente', 'lava louça', 'lava louças', 'limpeza', 'desinfetante', 'toalha', 'lençol', 'travesseiro', 'luminária', 'fita led', 'decoração', 'pinça', 'utensílio', 'garrafa', 'copo', 'aspirador', 'ventilador', 'balança'] },
   { slug: 'moda', label: 'Moda', words: ['camiseta', 'camisa', 'calça', 'vestido', 'jaqueta', 'moletom', 'tênis', 'sapato', 'sandália', 'bolsa', 'mochila', 'óculos', 'relógio', 'bermuda', 'meia', 'cueca', 'sutiã', 'boné', 'carteira'] },
@@ -29,7 +31,10 @@ export function classifyCategory(title: string, storeCategory?: string | null): 
   const text = norm(`${title} ${storeCategory ?? ''}`);
   // pontua pelo tamanho dos termos encontrados: termo longo é mais específico ("ciclismo" > "jaqueta")
   let best: { slug: CategorySlug; score: number } = { slug: 'outros', score: 0 };
+  // "teclado mecânico fidget / anti-stress" é brinquedo, não periférico gamer
+  const toy = /fidget|anti-?stress|antiestresse/.test(text);
   for (const c of CATEGORIES) {
+    if (toy && c.slug === 'games') continue;
     const score = c.words.reduce((n, w) => (text.includes(norm(w).slice(1, -1)) ? n + w.length : n), 0);
     if (score > best.score) best = { slug: c.slug, score };
   }

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { escapeHtml, LINK_PLACEHOLDER, renderMessageHtml, telegramHtmlToWhatsApp, type Store } from '@cupons/shared';
 import { ProviderRegistry } from '@cupons/affiliates';
-import { bestCouponFor, couponLine, dailyCap, markCouponUsed, prisma, recordPrice, upsertProduct, type Product as PrismaProduct } from '@cupons/db';
+import { bestCouponFor, couponLine, dailyCap, markCouponUsed, nicheChannelFor, prisma, recordPrice, upsertProduct, type Product as PrismaProduct } from '@cupons/db';
 import { sanitizeHook } from '@cupons/curator';
 import { config } from '../config.js';
 import { enqueuePublish } from '../queue.js';
@@ -178,36 +178,43 @@ export async function schedulePostForProduct(
   }
 
   const category = product.category ?? 'outros';
-  let channels = opts?.targetChannelId
-    ? // garimpado para um canal: o destino + os gerais que aceitam essa nota
+  // "variedades": produto de uma categoria que tem grupo próprio vai só para o grupo (Channel.routeNiche)
+  const niche = await nicheChannelFor(category);
+  let target = opts?.targetChannelId ?? null;
+  if (target && niche && niche.id !== target) {
+    const dest = await prisma.channel.findUnique({ where: { id: target }, select: { categories: true, routeNiche: true } });
+    if (dest && dest.categories.length === 0 && dest.routeNiche) target = niche.id; // geral → grupo do nicho
+  }
+  let channels = target
+    ? // garimpado para um canal: o destino + os gerais que ainda aceitam repasse de nicho (routeNiche desligado)
       await prisma.channel.findMany({
         where: {
           enabled: true,
-          OR: [
-            { id: opts.targetChannelId },
-            { categories: { isEmpty: true }, generalMinScore: { lte: opts.score ?? 0 } },
-          ],
+          OR: [{ id: target }, { categories: { isEmpty: true }, routeNiche: false, generalMinScore: { lte: opts?.score ?? 0 } }],
         },
         orderBy: { createdAt: 'asc' },
       })
-    : // manual/sem destino: geral recebe tudo; os de categoria, só o que é deles
+    : // manual/sem destino: os da categoria + o geral (se a categoria não tem grupo próprio ou o geral aceita nicho)
       await prisma.channel.findMany({
-        where: { enabled: true, OR: [{ categories: { isEmpty: true } }, { categories: { has: category } }] },
+        where: {
+          enabled: true,
+          OR: [{ categories: { has: category } }, { categories: { isEmpty: true }, ...(niche ? { routeNiche: false } : {}) }],
+        },
         orderBy: { createdAt: 'asc' },
       });
-  if (opts?.targetChannelId) {
+  if (target) {
     // os gerais entram "de carona": se já postaram este produto há pouco, ficam de fora
     // (a curadoria só confere o intervalo de repost no canal de destino)
     const since = new Date(Date.now() - config.repostCooldownDays * 86_400_000);
     const recent = await prisma.post.findMany({
       where: {
         productId,
-        channelId: { in: channels.filter((c) => c.id !== opts.targetChannelId).map((c) => c.id) },
+        channelId: { in: channels.filter((c) => c.id !== target).map((c) => c.id) },
         postedAt: { gte: since },
       },
       select: { channelId: true },
     });
-    channels = channels.filter((c) => c.id === opts.targetChannelId || !recent.some((r) => r.channelId === c.id));
+    channels = channels.filter((c) => c.id === target || !recent.some((r) => r.channelId === c.id));
   }
   if (channels.length === 0) {
     throw new Error(

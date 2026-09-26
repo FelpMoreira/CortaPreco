@@ -19,6 +19,7 @@ interface ChannelRow {
   jitterPct: number;
   warmupDays: number;
   generalMinScore: number;
+  routeNiche: boolean;
   _count: { posts: number };
   sources: SourceRow[];
 }
@@ -39,6 +40,7 @@ const EMPTY: Draft = {
   jitterPct: 0,
   warmupDays: 0,
   generalMinScore: 80,
+  routeNiche: true,
 };
 
 function ChannelForm({
@@ -124,10 +126,24 @@ function ChannelForm({
         </label>
       </div>
       {d.categories.length === 0 && (
-        <label className="field" style={{ maxWidth: 420 }}>
-          <span>Canal geral: receber ofertas garimpadas pelos grupos de nicho só com nota ≥</span>
-          <input className="input" type="number" min={0} max={101} value={d.generalMinScore} onChange={num('generalMinScore')} />
-        </label>
+        <div className="auto-box">
+          <label className="row" style={{ gap: 10, cursor: 'pointer', flexWrap: 'nowrap' }}>
+            <input type="checkbox" checked={d.routeNiche} onChange={(e) => setD({ ...d, routeNiche: e.target.checked })} />
+            <span>
+              <strong>Oferta de nicho vai só para o grupo do nicho</strong>
+              <span className="muted" style={{ display: 'block', fontSize: 13 }}>
+                Canal geral como &quot;variedades&quot;: o que chegar por aqui (espelhamento, busca, nova oferta) e for de uma
+                categoria com grupo próprio (ex.: Games) vai para esse grupo, não para o geral.
+              </span>
+            </span>
+          </label>
+          {!d.routeNiche && (
+            <label className="field" style={{ maxWidth: 420 }}>
+              <span>Receber as ofertas garimpadas pelos grupos de nicho só com nota ≥</span>
+              <input className="input" type="number" min={0} max={101} value={d.generalMinScore} onChange={num('generalMinScore')} />
+            </label>
+          )}
+        </div>
       )}
       {d.platform === 'WHATSAPP' && (
         <p className="warn" style={{ margin: 0, fontSize: 13 }}>
@@ -176,6 +192,7 @@ export function ChannelsTab({ me, notify }: { me: Me; notify: Notify }) {
       jitterPct: raw.jitterPct,
       warmupDays: raw.warmupDays,
       generalMinScore: raw.generalMinScore,
+      routeNiche: raw.routeNiche,
     };
     setBusy(true);
     try {
@@ -272,7 +289,9 @@ export function ChannelsTab({ me, notify }: { me: Me; notify: Notify }) {
                   <div className="chips">
                     {c.categories.length === 0 ? (
                       <span className="chip" aria-pressed="true">
-                        Geral: recebe tudo · dos nichos só nota ≥ {c.generalMinScore}
+                        {c.routeNiche
+                          ? 'Geral (variedades): nicho vai para o grupo do nicho'
+                          : `Geral: recebe tudo · dos nichos só nota ≥ ${c.generalMinScore}`}
                       </span>
                     ) : (
                       c.categories.map((slug) => (

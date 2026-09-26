@@ -30,6 +30,7 @@
 | D24 | Espelhamento de grupo | Fonte `MIRROR` por canal: conta dedicada do Telegram **ouve** o grupo; 1º link `meli.la` de cada mensagem vai para o **linker** (serviço novo com navegador logado na conta de afiliado do ML) que pega o produto do card em destaque, gera o nosso link no gerador e posta com atraso 0–150 s da mensagem original. Falha → alerta no canal. Só Telegram, sem fila/ritmo, respeita silêncio, ignora repetido em 24h | Pedido do usuário; o ML não tem API de link de afiliado para isso, então é navegador. Dados do card (não da página do produto, que cai em verificação anti-robô sem login). Serviço separado para o Chromium não pesar/derrubar o worker |
 | D25 | Espelhamento Amazon | Tipo de link `AMAZON` no mesmo fluxo: resolvedor seguro → `/dp/ASIN` → `?tag=AMAZON_PARTNER_TAG` (troca a tag de quem postou), dados pela leitura da página com teto de 30/h. Link sem produto (Prime, lista) e teto → **ignorados sem alerta** (vale também para vitrine do ML) | Pedido do usuário ("só trocar a tag"); não precisa navegador. Alerta vermelho só para falha de verdade |
 | D26 | Grupo de cupons | Fonte `COUPONS` por canal: o mesmo ouvinte lê cupons (ML, Amazon, Shopee, AliExpress) e guarda em `Coupon`; ML é testado na conta de afiliado ("Inserir código": VALID/RESTRICTED/INVALID + condições de "Meus cupons"); outras lojas valem 24 h. Cupom **geral** e válido vai junto dos posts da loja (mínimo ≤ preço, maior desconto); opcional publicar os cupons no canal, espaçados, sem os links do grupo | Pedido do dono; teste no ML sem comprar nada (combinado que o cupom fica na conta); só cupom geral junto do produto para não prometer desconto que não vale |
+| D27 | Geral = variedades | `Channel.routeNiche` (padrão **ligado**): o que chega pelo canal geral (espelhamento, busca, nova oferta) e é de categoria com grupo próprio vai **só** para esse grupo; o repasse "nota ≥ 80" dos nichos para o geral para. Desligado = comportamento antigo (D21) | Dono reclamou de teclado/gabinete gamer no geral: vinham do espelhamento de um grupo de tecnologia cadastrado no geral e do repasse de nota alta |
 
 ## Log
 
@@ -153,6 +154,11 @@
   (atualiza o canal e reenvia, auditoria `channel.migrated`) e o canal do `.env` só é semeado com o banco vazio (antes
   recriaria o canal com o ID morto a cada reinício). No Games o bot virou **membro comum** na conversão
   (`CHAT_WRITE_FORBIDDEN`: só admins postam) → canal pausado até torná-lo administrador de novo.
+- **2026-09-26** — Games: bot promovido a administrador ~11:34 → 1º post saiu; 16 ofertas que tinham falhado voltaram à fila
+  (1 por produto, 9 repetidas canceladas). A busca automática do Games achava ofertas com nota máx. 67 (< 70 do automático),
+  então a fila não enchia sozinha. Geral postando itens gamer: 4 de espelhamento (grupo de tecnologia cadastrado no geral) e 1
+  repasse de nota 82 → D27 (geral variedades) + classificador de games com periféricos/hardware (teclado mecânico, headset,
+  gabinete, placa de vídeo, water cooler, rtx/radeon/ryzen…).
 - **2026-09-26** — **paginação** no catálogo do site: 24 por página, feita no banco (`DISTINCT ON` loja + título, então dá
   para navegar por todo o histórico, não só pelos últimos 60), filtro de loja + página na URL (`/?loja=aliexpress&pagina=2`),
   navegação "‹ Anterior 1 … 4 5 6 … N Próxima ›" e aviso para página que não existe. 111 ofertas, 0 repetidas.

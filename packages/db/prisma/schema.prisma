@@ -97,6 +97,9 @@ model Channel {
   warmupDays   Int      @default(0)  // rampa de volume p/ número novo (0 = sem rampa)
   categories   String[] @default([]) // categorias que recebe (vazio = recebe tudo: grupo "geral")
   generalMinScore Int   @default(80) // canal geral: só recebe ofertas garimpadas p/ nichos com nota >= isto
+  /// Canal geral ("variedades"): oferta de uma categoria que tem grupo próprio vai só para esse grupo, e o
+  /// geral não recebe o repasse dos nichos (generalMinScore deixa de valer). Pedido em 2026-09-26.
+  routeNiche      Boolean   @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   posts        Post[]
