@@ -64,7 +64,8 @@ Nota completa: [[10 - Espelhamento Mercado Livre]]. Resumo:
 2. `npm run ml:login` **na sua máquina**: abre o Google Chrome comum (perfil separado); entre na conta de afiliado.
    Sessão → `data/linker/`. Se o ML disser "limite de tentativas", **pare** e tente de novo horas depois.
 3. Conferir: `docker compose exec linker npm run ml:check -w @cupons/linker -- --sessao` (e `-- <meli.la> --gerar`).
-4. Canais → canal de destino → **Espelhar grupo** → grupo, "Mercado Livre", atraso, silêncio → Salvar.
+4. Canais → canal de destino → **Espelhar grupo** → grupo, tipos de link (**Mercado Livre** e/ou **Amazon**), atraso,
+   silêncio → Salvar. Amazon não precisa de login: usa `AMAZON_PARTNER_TAG` do `.env` (troca a tag de quem postou).
    O interruptor **Ativo/Desligado** do card liga/desliga; religar começa da próxima mensagem.
 - Alerta vermelho no card/Visão geral = conversão falhou (motivo no texto). Resolva e clique **Dispensar**.
 - Sessão do ML expira de tempos em tempos: o card avisa "sessão expirou" → rode `npm run ml:login` de novo.
@@ -111,5 +112,9 @@ Mínimo para lançar (detalhes em [[08 - Segurança#Checklist de lançamento]]):
 | Espelhamento: "Conversor fora do ar" | Container `linker` parado/caído | `docker compose up -d linker`; `docker compose logs linker` |
 | Espelhamento: "campo textarea#url-0 não apareceu" / "link curto não apareceu" | ML mudou o gerador | Ver o print em `data/linker/debug/`, ajustar `SELECTORS` em `apps/linker/src/mercadolivre.ts` |
 | Espelhamento: "vitrine do afiliado, sem um produto em destaque" | O `meli.la` do grupo era de perfil, não de produto | Normal; nada a fazer (dispense o alerta) |
+| Espelhamento Amazon: "falta AMAZON_PARTNER_TAG" | Tag de afiliado vazia no `.env` | Preencher e `docker compose up -d --force-recreate linker api` |
+| Espelhamento Amazon: "a Amazon não mostrou o preço" | Tela anti-robô da Amazon | Passa sozinho; se repetir muito, o grupo posta Amazon demais (teto 30/h) |
+| Evento "ignorado: não é de um produto" | Link do grupo era Prime/lista/vitrine | Normal, sem alerta |
+| Fonte automática demora a repor a fila | "Ofertas por busca / intervalo mín." alto | Use 15 min (padrão ao ligar o automático) |
 | `ml:login`: "limite de tentativas" | Antifraude do ML (tentativas seguidas ou janela de automação) | Parar, esperar algumas horas; o `ml:login` atual usa o Chrome comum (sem automação) |
 | Espelhamento: "Não consegui ler o grupo …" | Conta dedicada não é membro, @ errado ou ID sem cache | Entrar no grupo com a conta; preferir `@usuario` |

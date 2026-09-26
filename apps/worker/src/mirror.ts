@@ -5,14 +5,21 @@ import type { TelegramClient } from 'telegram';
 import { NewMessage, type NewMessageEvent } from 'telegram/events/index.js';
 import { getPeerId } from 'telegram/Utils.js';
 import { prisma } from '@cupons/db';
-import { MIRROR_QUEUE, MIRROR_STATUS_KEYS, mirrorLinkType, type MirrorJob, type MirrorLinkType } from '@cupons/shared';
+import {
+  MIRROR_LINK_TYPE_KEYS,
+  MIRROR_QUEUE,
+  MIRROR_STATUS_KEYS,
+  mirrorLinkType,
+  type MirrorJob,
+  type MirrorLinkType,
+} from '@cupons/shared';
 import { config } from './config.js';
 import { extractLinks, type MessageLike } from './telegramLinks.js';
 import { entityById, getClient, readerConfigured, whenClientCreated } from './telegramReader.js';
 
 /**
  * Espelhamento — parte 1 (worker): ouve os grupos observados com a conta dedicada do Telegram.
- * Para cada mensagem nova com link tratável (ex.: meli.la), cria um SourceEvent e manda para a
+ * Para cada mensagem nova com link tratável (meli.la, amzn.to…), cria um SourceEvent e manda para a
  * fila `mirror`, onde o linker (navegador logado) converte para o NOSSO link e agenda o post.
  * Fluxo completo e decisões: cofre/10 - Espelhamento Mercado Livre.md
  */
@@ -144,7 +151,7 @@ async function refresh(): Promise<void> {
         sourceId: s.id,
         chat,
         input: r.input,
-        linkTypes: s.linkTypes.filter((t): t is MirrorLinkType => t === 'MERCADOLIVRE'),
+        linkTypes: s.linkTypes.filter((t): t is MirrorLinkType => (MIRROR_LINK_TYPE_KEYS as string[]).includes(t)),
         maxDelaySec: s.maxDelaySec,
       };
       next.set(r.peerId, [...(next.get(r.peerId) ?? []), w]);

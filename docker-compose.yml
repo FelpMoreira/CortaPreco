@@ -181,8 +181,8 @@ services:
     # DNS explícito: o 127.0.0.53 do host não é alcançável de dentro dos containers
     dns: [1.1.1.1, 8.8.8.8]
     container_name: cupons-bot
-    # sem token o bot sai com código 0 (desativado), sem loop de restart
-    restart: "no"
+    # on-failure: volta sozinho se cair (código ≠ 0); sem token ele sai com 0 (desativado) e não fica em loop
+    restart: on-failure
     # todas as variáveis do .env (curadoria, ritmo, lojas...); o bloco environment
     # abaixo só sobrescreve o que muda dentro da rede do Compose
     env_file:

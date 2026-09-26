@@ -8,6 +8,7 @@ export * from './types.js';
 export { ShopeeProvider } from './shopee.js';
 export { AliExpressProvider, relevantPromos } from './aliexpress.js';
 export { AmazonProvider } from './amazon.js';
+export { canonicalProductUrl, isAllowedHop, resolveLink, SHORTENERS, STORE_HOSTS } from './links.js';
 
 export interface ProviderConfig {
   shopee?: { appId: string; appSecret: string; subId?: string };

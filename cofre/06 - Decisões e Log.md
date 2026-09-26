@@ -28,6 +28,7 @@
 | D22 | Modo automático | **Por fonte**: "Postar automaticamente" + nota mínima (padrão 70). A API aprova a cada 1 min o que passar; freio de 8 posts na fila por canal e sugestão com mais de 12h não vai sozinha | Tira o gargalo da aprovação sem abrir mão do controle: dá para ligar só na fonte em que se confia; ritmo/silêncio seguem no scheduler |
 | D23 | Fila por qualidade | A fila sai pela **nota** (agendado à mão = 100, vai primeiro); post automático que passa 24h sem sair expira. **Preço conferido na loja antes de postar** (AliExpress via API): subiu > 2% ou sumiu → cancela; mudou pouco/caiu → sai com o valor de agora. Sem limite de tamanho de fila | O risco não é fila grande, é oferta velha; conferir na hora resolve na raiz e deixa a fila crescer à vontade |
 | D24 | Espelhamento de grupo | Fonte `MIRROR` por canal: conta dedicada do Telegram **ouve** o grupo; 1º link `meli.la` de cada mensagem vai para o **linker** (serviço novo com navegador logado na conta de afiliado do ML) que pega o produto do card em destaque, gera o nosso link no gerador e posta com atraso 0–150 s da mensagem original. Falha → alerta no canal. Só Telegram, sem fila/ritmo, respeita silêncio, ignora repetido em 24h | Pedido do usuário; o ML não tem API de link de afiliado para isso, então é navegador. Dados do card (não da página do produto, que cai em verificação anti-robô sem login). Serviço separado para o Chromium não pesar/derrubar o worker |
+| D25 | Espelhamento Amazon | Tipo de link `AMAZON` no mesmo fluxo: resolvedor seguro → `/dp/ASIN` → `?tag=AMAZON_PARTNER_TAG` (troca a tag de quem postou), dados pela leitura da página com teto de 30/h. Link sem produto (Prime, lista) e teto → **ignorados sem alerta** (vale também para vitrine do ML) | Pedido do usuário ("só trocar a tag"); não precisa navegador. Alerta vermelho só para falha de verdade |
 
 ## Log
 
@@ -122,6 +123,16 @@
 - **2026-09-26** — conta do Telegram conectada; `ml:login` ok. 1ª conversão real: o "Gerar" só habilita **digitando**
   a URL (colar deixa desabilitado) — corrigido. `meli.la/12hnEiy` → `meli.la/2zFYfUp` com a nossa etiqueta
   (`<nossa etiqueta>`). ML pede validação de identidade da conta de afiliado em até 96 dias.
+- **2026-09-26** — espelhamento também para **Amazon** (D25): testado com 5 `amzn.to` reais e ponta a ponta com canal
+  falso; tag do link = `AMAZON_PARTNER_TAG`. Resolvedor seguro de links movido para `packages/affiliates/src/links.ts`
+  (worker e linker usam o mesmo). Conversores do linker separados por tipo (`conversion.ts`, `amazon.ts`).
+- **2026-09-26** — AliExpress "100% automático": a busca já funcionava (aprovações em lotes de 5, fila reposta, madrugada
+  respeitada), mas as fontes estavam com **intervalo mínimo de 120 min** → fila vazia ~45 min entre buscas. Ajustado para
+  **15 min** nas duas fontes automáticas. Filtro de nicho passou a comparar **palavra a palavra com sinônimos**
+  (gamer = jogos/gaming/e-sports; headset = fone; mouse = rato; controle = controlador/joystick): em 39 produtos reais dos
+  termos de Games, 26 → 35 aceitos, e continuam recusados mouse/fone comuns, "jogo de panelas", "controle remoto de TV".
+- **2026-09-26** — bot estava parado desde 2026-09-25 21:14 UTC (recebeu SIGTERM numa recriação e tinha `restart: "no"`).
+  Não afetou posts (quem publica é o worker). Religado com `restart: on-failure` (sem token sai com 0 e não entra em loop).
 
 ## Regras de ouro
 

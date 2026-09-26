@@ -3,7 +3,9 @@ import { inQuietHours, prisma, upsertProduct } from '@cupons/db';
 import { escapeHtml, LINK_PLACEHOLDER, renderMessageHtml } from '@cupons/shared';
 import { withPage } from './browser.js';
 import { config } from './config.js';
-import { ConversionError, generateAffiliateLink, resolveProduct, type MlProduct } from './mercadolivre.js';
+import { convertAmazon } from './amazon.js';
+import { ConversionError, type BeforeExpensiveStep, type ConversionResult, type ConvertedProduct } from './conversion.js';
+import { generateAffiliateLink, resolveProduct } from './mercadolivre.js';
 import { reportConversion } from './status.js';
 
 /**
@@ -29,17 +31,30 @@ async function finish(eventId: string, status: 'SKIPPED' | 'FAILED' | 'CONVERTED
   await prisma.sourceEvent.update({ where: { id: eventId }, data: { status, detail: detail.slice(0, 500), ...extra } });
 }
 
+/** Mercado Livre: navegador logado (card em destaque + gerador de links). */
+function convertMercadoLivre(link: string, before: BeforeExpensiveStep): Promise<ConversionResult> {
+  return withPage({ session: true }, async (page, ctx) => {
+    const p = await resolveProduct(page, ctx, link);
+    const skip = await before({ store: 'MERCADOLIVRE', itemId: p.itemId }); // repetido → nem abre o gerador
+    if (skip) return { skip };
+    const affiliateUrl = await generateAffiliateLink(page, ctx, p.productUrl);
+    return { product: { ...p, store: 'MERCADOLIVRE' as const }, affiliateUrl };
+  });
+}
+
+/** Um conversor por tipo de link (MIRROR_LINK_TYPES). */
+const CONVERTERS: Record<string, (link: string, before: BeforeExpensiveStep) => Promise<ConversionResult>> = {
+  MERCADOLIVRE: convertMercadoLivre,
+  AMAZON: convertAmazon,
+};
+
 /** Converte com 1 nova tentativa para falhas passageiras (página lenta, rede). */
-async function convert(link: string, beforeGenerate: (p: MlProduct) => Promise<string | null>): Promise<{ product: MlProduct; affiliateUrl: string } | { skip: string }> {
+async function convert(linkType: string, link: string, before: BeforeExpensiveStep): Promise<ConversionResult> {
+  const converter = CONVERTERS[linkType];
+  if (!converter) throw new ConversionError(`tipo de link sem conversor: ${linkType}`, 'CONFIG');
   for (let attempt = 1; ; attempt++) {
     try {
-      return await withPage({ session: true }, async (page, ctx) => {
-        const product = await resolveProduct(page, ctx, link);
-        const skip = await beforeGenerate(product); // ex.: repetido → nem abre o gerador
-        if (skip) return { skip };
-        const affiliateUrl = await generateAffiliateLink(page, ctx, product.productUrl);
-        return { product, affiliateUrl };
-      });
+      return await converter(link, before);
     } catch (err) {
       const retry = attempt < 2 && (!(err instanceof ConversionError) || err.retryable);
       if (!retry) throw err;
@@ -54,6 +69,7 @@ export async function processMirrorEvent(eventId: string): Promise<void> {
   const { source } = event;
   const { channel } = source;
   const postAt = event.postAt ?? new Date();
+  const isMl = event.linkType === 'MERCADOLIVRE'; // só o ML mexe no status da sessão da conta de afiliado
 
   if (!source.enabled || !channel.enabled) return finish(eventId, 'SKIPPED', 'fluxo ou canal desligado');
   if (channel.platform !== 'TELEGRAM') return finish(eventId, 'SKIPPED', 'espelhamento só posta em canal do Telegram');
@@ -61,13 +77,13 @@ export async function processMirrorEvent(eventId: string): Promise<void> {
     return finish(eventId, 'SKIPPED', `horário de silêncio do canal (${channel.quietHours.replace('-', 'h–')}h)`);
   }
 
-  let result: Awaited<ReturnType<typeof convert>>;
+  let result: ConversionResult;
   try {
-    result = await convert(event.link, async (p) => {
+    result = await convert(event.linkType, event.link, async ({ store, itemId }) => {
       const recent = await prisma.post.findFirst({
         where: {
           channelId: channel.id,
-          product: { store: 'MERCADOLIVRE', storeProductId: p.itemId },
+          product: { store, storeProductId: itemId },
           status: { in: ['SCHEDULED', 'POSTING', 'POSTED'] },
           createdAt: { gte: new Date(Date.now() - REPOST_WINDOW_MS) },
         },
@@ -78,7 +94,12 @@ export async function processMirrorEvent(eventId: string): Promise<void> {
   } catch (err) {
     const e = err instanceof ConversionError ? err : null;
     const reason = (err as Error).message.split('\n')[0]!.slice(0, 300);
-    await reportConversion(e?.kind === 'SESSION' ? 'expired' : e?.kind === 'BLOCKED' ? 'blocked' : null, reason);
+    if (e?.isSkip) {
+      // link sem produto ou teto da loja: não é falha nossa, só registra
+      if (isMl) await reportConversion('ok', null);
+      return finish(eventId, 'SKIPPED', reason);
+    }
+    if (isMl) await reportConversion(e?.kind === 'SESSION' ? 'expired' : e?.kind === 'BLOCKED' ? 'blocked' : null, reason);
     await finish(eventId, 'FAILED', e?.debugFile ? `${reason} (print: data/linker/debug/${e.debugFile}.png)` : reason);
     // alerta no canal: fica no painel até alguém dispensar
     await prisma.channelSource.update({
@@ -94,12 +115,9 @@ export async function processMirrorEvent(eventId: string): Promise<void> {
     return;
   }
 
-  if ('skip' in result) {
-    await reportConversion('ok', null);
-    return finish(eventId, 'SKIPPED', result.skip);
-  }
+  if (isMl) await reportConversion('ok', null);
+  if ('skip' in result) return finish(eventId, 'SKIPPED', result.skip);
   const { product: p, affiliateUrl } = result;
-  await reportConversion('ok', null);
 
   if (Date.now() - postAt.getTime() > MAX_LATE_MS) {
     return finish(eventId, 'SKIPPED', 'conversão terminou tarde demais (oferta velha)', { productUrl: p.productUrl, affiliateUrl });
@@ -116,13 +134,13 @@ export async function createMirrorPost(args: {
   eventId: string;
   sourceId: string;
   channel: { id: string; platform: string };
-  product: MlProduct;
+  product: ConvertedProduct;
   affiliateUrl: string;
   postAt: Date;
 }): Promise<{ postId: string; when: Date }> {
   const { eventId, sourceId, channel, product: p, affiliateUrl, postAt } = args;
   const product = await upsertProduct({
-    store: 'MERCADOLIVRE',
+    store: p.store,
     storeProductId: p.itemId,
     url: p.productUrl,
     title: p.title,
@@ -138,7 +156,7 @@ export async function createMirrorPost(args: {
 
   // nosso texto, com os dados do produto (nunca o texto/imagem da mensagem de origem)
   const template = renderMessageHtml({
-    store: 'MERCADOLIVRE',
+    store: p.store,
     title: p.title,
     price: p.price,
     oldPrice: p.oldPrice,

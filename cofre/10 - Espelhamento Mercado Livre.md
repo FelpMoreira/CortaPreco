@@ -1,7 +1,8 @@
-# 10 — Espelhamento de grupo (Mercado Livre)
+# 10 — Espelhamento de grupo (Mercado Livre e Amazon)
 
-> Feature pedida em **2026-09-25**. Observa um grupo de promoções no Telegram e, para cada mensagem com link
-> do Mercado Livre (`meli.la`), gera o **nosso** link de afiliado e posta no nosso canal com atraso aleatório.
+> Feature pedida em **2026-09-25** (Mercado Livre) e estendida em **2026-09-26** (Amazon). Observa um grupo de promoções
+> no Telegram e, para cada mensagem com link tratável (`meli.la`, `amzn.to`…), gera o **nosso** link de afiliado e posta
+> no nosso canal com atraso aleatório. Amazon: seção [[#Amazon (2026-09-26)]].
 > Decisão: [[06 - Decisões e Log#Decisões]] (D24). Operação do dia a dia: [[07 - Operação#Espelhamento de grupo]].
 
 ## O pedido (como veio)
@@ -94,7 +95,8 @@
   (ex.: `…/up/MLBU4880400472?pdp_filters=item_id%3AMLB7470662084&matt_…#polycard_client=…`). Se vier sem `href`
   (como no navegador logado do pedido), o linker **clica** e pega o destino (mesma aba ou aba nova).
 - Link de **vitrine**: alguns `meli.la` apontam para o perfil inteiro (41 produtos em grade, nenhum em destaque) →
-  evento `FAILED` com "o link aponta para a vitrine do afiliado, sem um produto em destaque" (e alerta).
+  evento `SKIPPED` "o link aponta para a vitrine do afiliado, sem um produto em destaque" (sem alerta desde 2026-09-26:
+  não é falha de conversão).
 - Formatos de URL do produto: catálogo `…/p/MLB52192170`, "user product" `…/up/MLBU4880400472`,
   anúncio `produto.mercadolivre.com.br/MLB-4320637847-…-_JM`. Tirar a query tira também o `pdp_filters=item_id:…`
   (vendedor específico): o link cai na página do produto e o ML escolhe a oferta — foi o pedido ("sem os query params").
@@ -136,11 +138,15 @@ A página tem um reCAPTCHA invisível; não impediu a geração.
 |------|---------|-----------------|--------------------|
 | `SESSION` | gerador caiu no login | não | "sessão expirou: rode npm run ml:login" |
 | `BLOCKED` | ML pediu verificação de conta | não | "ML pediu verificação" |
-| `NO_PRODUCT` | link de vitrine; link levou para fora do ML | não | — |
-| `LAYOUT` | campo/botão/link curto não apareceu; card incompleto | sim (1×, após 5 s) | — |
-| `NETWORK` | página não abriu | sim (1×) | — |
+| `CONFIG` | falta `AMAZON_PARTNER_TAG`; tipo de link sem conversor | não | — |
+| `NO_PRODUCT` | link de vitrine do ML; link da Amazon para Prime/lista/busca; link fora da loja | não → **ignorado, sem alerta** | — |
+| `RATE` | teto de leitura da Amazon (30/h) | não → **ignorado, sem alerta** | — |
+| `LAYOUT` | campo/botão/link curto não apareceu; card incompleto; Amazon sem preço (anti-robô) | sim (1×, após 5 s) | — |
+| `NETWORK` | página/encurtador não abriu | sim (1×) | — |
 
-- Falha final → `SourceEvent FAILED` + `ChannelSource.alert = "Conversão do link falhou (<link>): <motivo>"`,
+Tipos, `ConversionError` e `isSkip` em `apps/linker/src/conversion.ts`.
+
+- Falha final (não "ignorado") → `SourceEvent FAILED` + `ChannelSource.alert = "Conversão do link falhou (<link>): <motivo>"`,
   `alertCount++`. Aparece em **Canais** (card do fluxo, em vermelho) e na **Visão geral** (faixa no topo), com
   **Dispensar** (qualquer perfil; auditado como `source.dismiss_alert`). O histórico continua em "Últimas mensagens".
 - Grupo inacessível (conta não é membro, @ errado) → alerta "Não consegui ler o grupo …" (só quando o texto muda).
@@ -202,6 +208,37 @@ O gerador mostra: **"Valide sua identidade para continuar no Programa — preenc
 evitar que sua conta seja suspensa"** (visto em 2026-09-26 → prazo por volta de **2026-12-31**). Não bloqueia hoje, mas se
 a conta for suspensa o espelhamento para (alerta de sessão/verificação). Etiqueta em uso: `<nossa etiqueta>`.
 
+## Amazon (2026-09-26)
+
+Pedido: "pegar o link da Amazon e substituir a tag de afiliado pela nossa que está no .env". Bem mais simples que o ML:
+**sem navegador e sem login**. Mesmo fluxo de ouvinte → fila `mirror` → linker; o linker escolhe o conversor pelo
+`linkType` do evento (`CONVERTERS` em `apps/linker/src/mirror.ts`).
+
+1. Detecção (`mirrorLinkType`): host `amzn.to`, `a.co`, `amazon.com.br`/`www.amazon.com.br` → `AMAZON`. `amazon.com` (EUA),
+   `amzn.eu` e domínios falsos (`amzn.to.golpe.com`) são ignorados.
+2. `resolveLink` (o mesmo resolvedor seguro das fontes, agora em `packages/affiliates/src/links.ts`) segue o encurtador
+   conferindo cada salto; `canonicalProductUrl` → `https://www.amazon.com.br/dp/ASIN` (some `tag=` de quem postou, `linkCode`,
+   `linkId`, `ref_`…). Não é produto (ex.: `amzn.to` → `/prime`) → `NO_PRODUCT` → ignorado sem alerta.
+3. Repetido no canal em 24h (mesmo ASIN) → ignorado **antes** de ler a página.
+4. Nosso link = `AmazonProvider.affiliateLink` → `https://www.amazon.com.br/dp/ASIN?tag=<AMAZON_PARTNER_TAG>`.
+5. Dados do post = `AmazonProvider.enrich` (leitura da página, a mesma do "Nova oferta": título, preço, imagem).
+   Teto de **30 leituras/h** e **4 s** entre leituras no linker (a Amazon dá tela anti-robô depois de ~45 seguidas, D-log
+   2026-09-23). Passou do teto → ignorado. Sem preço na página → `LAYOUT` (1 nova tentativa, depois alerta).
+6. Post com o nosso template ("ACHADO NA AMAZON"/"OFERTA AMAZON"), prioridade 100, mesmo atraso sorteado.
+   Sem conferência de preço antes de enviar (a Amazon não tem API de preço aqui; o publish loga "sem conferência").
+
+Painel: tipo "Amazon" nos chips (fluxo novo já vem com ML + Amazon se a tag existir), etiqueta `badge AMAZON`, saúde
+"Amazon: tag de afiliado configurada / falta AMAZON_PARTNER_TAG". A API recusa fluxo com Amazon sem a tag.
+Diagnóstico: `docker compose exec linker npm run ml:check -w @cupons/linker -- https://amzn.to/XXXX` (sem postar).
+
+Testes (2026-09-26): 5 `amzn.to` reais de grupos públicos → 4 produtos (tag `co.wpp-reduz-20` de quem postou trocada pela
+nossa; título/preço/imagem lidos) + 1 link do Prime (ignorado). Dentro do container: a tag do link gerado é **igual** à
+`AMAZON_PARTNER_TAG` do `.env`. Detecção (9 casos). Ponta a ponta com canal falso: evento → post "ACHADO NA AMAZON"
+R$ 30,89 com a nossa tag → envio disparou → "chat not found" (nada publicado); link do Prime → `SKIPPED` sem alerta.
+
+Riscos: ler a página da Amazon com robô vai contra as Condições de Uso do Associados (D15) — teto baixo mitiga, mas o
+caminho oficial é a Creators API (exige 10 vendas/30 dias). Preço lido pode ficar velho até o post sair (≤ 2min30s).
+
 ## Riscos
 
 - **Termos do Mercado Livre**: automatizar o portal de afiliados com robô pode violar as regras do programa → risco de
@@ -216,6 +253,6 @@ a conta for suspensa o espelhamento para (alerta de sessão/verificação). Etiq
 ## Ideias para depois
 
 - Aceitar também links diretos `mercadolivre.com.br/...` e `mercadolivre.com/sec/...` (novo tipo em `MIRROR_LINK_TYPES`).
-- Outros tipos de link (Amazon, Shopee) reaproveitando o mesmo ouvinte: só precisa de um conversor novo no linker.
+- Shopee/AliExpress no espelhamento: mesmo ouvinte, só um conversor novo em `CONVERTERS` (ambos já têm API de link).
 - Aviso do alerta também por DM do bot aos admins.
 - Teto opcional de posts/hora por fluxo.

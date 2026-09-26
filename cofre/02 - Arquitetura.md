@@ -25,7 +25,7 @@ Monorepo npm workspaces, TypeScript estrito, Node 20+. Etapas desacopladas por f
 | `apps/bot` | grammY: `/start`, `/whoami`, `/stats`, `/channel` | `index.ts` |
 | `apps/linker` | Navegador (Playwright/Chromium) logado na conta de afiliado do ML: converte links do espelhamento | `mercadolivre.ts`, `mirror.ts`, `browser.ts` — ver [[10 - Espelhamento Mercado Livre]] |
 | `apps/web` | Next.js: painel `/admin` + site público `/` | `middleware.ts` (sessão + CSRF), `app/api/admin/[...path]` (proxy), `app/admin/_ui/*` |
-| `packages/affiliates` | Providers Shopee/AliExpress/Amazon, interface única | `types.ts` (`AffiliateProvider`) |
+| `packages/affiliates` | Providers Shopee/AliExpress/Amazon, interface única; resolvedor seguro de links de terceiros | `types.ts` (`AffiliateProvider`), `links.ts` (`resolveLink`, `canonicalProductUrl`, `isAllowedHop`) |
 | `packages/shared` | Tipos + template da mensagem | `template.ts` (`LINK_PLACEHOLDER`) |
 | `packages/db` | Prisma schema + client | `prisma/schema.prisma` |
 

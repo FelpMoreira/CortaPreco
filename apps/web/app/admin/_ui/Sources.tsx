@@ -297,7 +297,7 @@ export function ChannelSources({
 
   const blank = (kind: 'API' | 'TELEGRAM' | 'MIRROR'): Draft => ({
     kind,
-    label: kind === 'API' ? 'APIs oficiais' : kind === 'MIRROR' ? 'Espelhamento Mercado Livre' : 'Grupo do Telegram',
+    label: kind === 'API' ? 'APIs oficiais' : kind === 'MIRROR' ? 'Espelhamento de grupo' : 'Grupo do Telegram',
     stores: kind === 'API' && presets?.stores.ALIEXPRESS ? ['ALIEXPRESS'] : [],
     // termos prontos das categorias do canal (editáveis)
     keywords: kind === 'API' ? [...new Set(categories.flatMap((c) => presets?.searchTerms[c] ?? []))] : [],
@@ -312,7 +312,8 @@ export function ChannelSources({
     intervalMin: kind === 'API' ? 120 : 30,
     autoApprove: false,
     autoMinScore: 70,
-    linkTypes: kind === 'MIRROR' ? ['MERCADOLIVRE'] : [],
+    // grupos de oferta misturam lojas: já vem com todos os tipos que dá para converter
+    linkTypes: kind === 'MIRROR' ? ['MERCADOLIVRE', ...(presets?.mirror.amazonTag ? ['AMAZON'] : [])] : [],
     maxDelaySec: presets?.mirror.defaultMaxDelaySec ?? 150,
     respectQuiet: true,
   });

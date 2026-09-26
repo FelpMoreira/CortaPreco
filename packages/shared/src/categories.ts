@@ -71,5 +71,30 @@ export function matchesNiche(title: string, rule: NicheRule): boolean {
   if (rule.excludeWords.some((w) => w.trim() && t.includes(norm(w).slice(1, -1)))) return false;
   if (rule.categories.length === 0) return true;
   if (rule.categories.includes(classifyCategory(title))) return true;
-  return rule.keywords.some((k) => k.trim() && t.includes(norm(k).slice(1, -1)));
+  return rule.keywords.some((k) => keywordMatches(k, t));
+}
+
+/**
+ * Sinônimos para casar o termo da fonte com títulos traduzidos à máquina (AliExpress):
+ * "mouse gamer" também é "Mouse para jogos", "Gaming mouse", "Rato do jogo E-Sports".
+ * Medido em 2026-09-26 com 39 produtos reais dos termos de Games: 26 → 35 aceitos, sem aceitar
+ * mouse/fone comuns (sem nada de jogo no título).
+ */
+const SYNONYMS: Record<string, string[]> = {
+  gamer: ['gamer', 'gaming', 'game', 'games', 'jogo', 'jogos', 'esports', 'e-sports'],
+  headset: ['headset', 'fone', 'fones', 'headphone', 'headphones', 'auricular'],
+  mouse: ['mouse', 'rato'],
+  controle: ['controle', 'controlador', 'joystick', 'gamepad'],
+  mousepad: ['mousepad', 'mouse pad', 'tapete de mouse'],
+};
+const STOPWORDS = new Set(['de', 'da', 'do', 'para', 'com', 'e', 'a', 'o']);
+
+const wordStart = (text: string, word: string) =>
+  new RegExp(`(^|[^a-z0-9])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(text);
+
+/** Todas as palavras do termo (ou um sinônimo delas) aparecem no título, no começo de uma palavra. */
+function keywordMatches(keyword: string, normalizedTitle: string): boolean {
+  const words = norm(keyword).trim().split(/\s+/).filter((w) => w && !STOPWORDS.has(w));
+  if (!words.length) return false;
+  return words.every((w) => (SYNONYMS[w] ?? [w]).some((alt) => wordStart(normalizedTitle, norm(alt).trim())));
 }

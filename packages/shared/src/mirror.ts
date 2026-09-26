@@ -5,7 +5,11 @@
 export const MIRROR_LINK_TYPES = {
   MERCADOLIVRE: {
     label: 'Mercado Livre',
-    hint: 'links meli.la (encurtador de afiliado do Mercado Livre)',
+    hint: 'links meli.la: o linker gera o nosso link no gerador de afiliados (navegador logado)',
+  },
+  AMAZON: {
+    label: 'Amazon',
+    hint: 'links amzn.to / amazon.com.br: troca a tag de afiliado de quem postou pela nossa (AMAZON_PARTNER_TAG)',
   },
 } as const;
 
@@ -26,6 +30,8 @@ export function mirrorLinkType(url: string): MirrorLinkType | null {
   }
   // meli.la é o encurtador que o Programa de Afiliados do Mercado Livre gera
   if (host === 'meli.la' || host.endsWith('.meli.la')) return 'MERCADOLIVRE';
+  // encurtadores oficiais da Amazon (amzn.to, a.co) ou a loja brasileira direto
+  if (host === 'amzn.to' || host === 'a.co' || host === 'amazon.com.br' || host.endsWith('.amazon.com.br')) return 'AMAZON';
   return null;
 }
 

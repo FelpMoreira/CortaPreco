@@ -46,7 +46,9 @@
 - [x] Espelhamento de grupo do Telegram com conversão de links do Mercado Livre (D24, [[10 - Espelhamento Mercado Livre]])
 - [x] Espelhamento: `npm run ml:login` na conta de afiliado e validar o gerador de links logado (1ª conversão real, 2026-09-26)
 - [ ] Validar a identidade na conta de afiliado do ML (prazo ~2026-12-31, senão a conta é suspensa)
-- [ ] Espelhamento: ligar num grupo real e acompanhar alertas/histórico na 1ª semana
+- [x] Espelhamento ligado num grupo real (OQMDV-PROMO → Games, 2026-09-26)
+- [ ] Espelhamento: acompanhar alertas/histórico na 1ª semana
+- [x] Espelhamento também para links da Amazon (troca de tag, D25)
 - [ ] Escolher provedor de IA (comparar custo) e ligar
 - [ ] Aprovação pelo privado do bot no Telegram (botões)
 - [x] Modo automático (sem aprovação) por fonte, com nota mínima (D22)

@@ -12,6 +12,7 @@
     "ml:check": "tsx scripts/ml-check.ts"
   },
   "dependencies": {
+    "@cupons/affiliates": "*",
     "@cupons/db": "*",
     "@cupons/shared": "*",
     "bullmq": "^5.12.0",

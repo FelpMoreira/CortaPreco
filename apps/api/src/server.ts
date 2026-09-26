@@ -582,6 +582,9 @@ export function buildServer(): FastifyInstance {
     if (f.kind === 'API' && !f.stores.length) return 'Escolha pelo menos uma loja.';
     if ((f.kind === 'TELEGRAM' || f.kind === 'MIRROR') && !f.chat) return 'Informe o @ ou o ID do grupo/canal observado.';
     if (f.kind === 'MIRROR' && !f.linkTypes.length) return 'Escolha que tipo de link o espelhamento pega.';
+    if (f.kind === 'MIRROR' && f.linkTypes.includes('AMAZON') && !process.env.AMAZON_PARTNER_TAG) {
+      return 'Para links da Amazon, configure AMAZON_PARTNER_TAG (a nossa tag de afiliado) no .env.';
+    }
     // rajada de posts no WhatsApp = risco de ban do número (D18)
     if (f.kind === 'MIRROR' && platform !== 'TELEGRAM') return 'Espelhamento só para canais do Telegram.';
     return null;
@@ -609,7 +612,12 @@ export function buildServer(): FastifyInstance {
         AMAZON: false, // busca automática só com a Creators API
       },
       telegramReader: Boolean(process.env.TELEGRAM_API_ID && process.env.TELEGRAM_API_HASH && process.env.TELEGRAM_USER_SESSION),
-      mirror: { linkTypes: MIRROR_LINK_TYPES, defaultMaxDelaySec: MIRROR_DEFAULT_MAX_DELAY_SEC, ...(await mirrorStatus()) },
+      mirror: {
+        linkTypes: MIRROR_LINK_TYPES,
+        defaultMaxDelaySec: MIRROR_DEFAULT_MAX_DELAY_SEC,
+        amazonTag: Boolean(process.env.AMAZON_PARTNER_TAG),
+        ...(await mirrorStatus()),
+      },
     };
   });
 

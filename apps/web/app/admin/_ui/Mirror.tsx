@@ -16,13 +16,14 @@ import { adminFetch, fmtDate, type Notify } from './common';
 
 /**
  * Espelhamento de grupo do Telegram (fonte MIRROR): observa um grupo de promoções, converte os links
- * tratáveis (Mercado Livre: meli.la) para o NOSSO link de afiliado e posta no canal com atraso
+ * tratáveis (Mercado Livre: meli.la; Amazon: amzn.to) para o NOSSO link de afiliado e posta no canal com atraso
  * aleatório. Detalhes: cofre/10 - Espelhamento Mercado Livre.md
  */
 
 export interface MirrorPresets {
   linkTypes: Record<string, { label: string; hint: string }>;
   defaultMaxDelaySec: number;
+  amazonTag: boolean;
   listener: { ok?: boolean; reason?: string; watching?: { sourceId: string; title: string }[]; at?: string } | null;
   linker: { online?: boolean; session?: string; lastError?: string | null; lastOkAt?: string | null; at?: string } | null;
 }
@@ -70,7 +71,8 @@ export function MirrorFormFields<T extends MirrorFields>({
           ))}
         </div>
         <span className="muted" style={{ fontSize: 12 }}>
-          Mensagem sem esse tipo de link é ignorada. Com mais de um link, vale o primeiro.
+          Mensagem sem esses tipos de link é ignorada. Com mais de um link, vale o primeiro. Mercado Livre usa o navegador
+          logado na conta de afiliado; Amazon só troca a tag de quem postou pela nossa.
         </span>
       </div>
       <div className="grid cols-2" style={{ gap: 12 }}>
@@ -117,9 +119,16 @@ function listenerHealth(sourceId: string, enabled: boolean, p: MirrorPresets): H
   return enabled ? { tone: 'wait', text: 'Conectando ao grupo (até 1 min)…' } : { tone: 'wait', text: 'Desligado' };
 }
 
-function linkerHealth(p: MirrorPresets): Health {
+function amazonHealth(p: MirrorPresets): Health {
+  return p.amazonTag
+    ? { tone: 'ok', text: 'Amazon: tag de afiliado configurada' }
+    : { tone: 'bad', text: 'Amazon: falta AMAZON_PARTNER_TAG no .env' };
+}
+
+function linkerHealth(p: MirrorPresets, needsMlSession: boolean): Health {
   const k = p.linker;
   if (!k) return { tone: 'bad', text: 'Conversor fora do ar (serviço linker parado)' };
+  if (!needsMlSession) return { tone: 'ok', text: 'Conversor no ar' };
   switch (k.session) {
     case 'ok':
       return { tone: 'ok', text: 'Conversor no ar · sessão do Mercado Livre ok' };
@@ -258,7 +267,7 @@ export function MirrorCard({
     }
   }
 
-  const types = s.linkTypes.map((t) => presets?.linkTypes[t]?.label ?? t);
+  const types = s.linkTypes.map((t) => ({ key: t, label: presets?.linkTypes[t]?.label ?? t }));
   return (
     <div className={`mirror-card${s.enabled ? '' : ' off'}`}>
       <div className="spread" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
@@ -273,8 +282,8 @@ export function MirrorCard({
           <span className="row" style={{ gap: 6 }}>
             <span className="muted">Pega links:</span>
             {types.map((t) => (
-              <span key={t} className="badge MERCADOLIVRE">
-                {t}
+              <span key={t.key} className={`badge ${t.key}`}>
+                {t.label}
               </span>
             ))}
             <span className="muted">
@@ -307,7 +316,8 @@ export function MirrorCard({
       {presets && (
         <div className="row" style={{ gap: 14 }}>
           <HealthLine h={listenerHealth(s.id, s.enabled, presets)} />
-          <HealthLine h={linkerHealth(presets)} />
+          <HealthLine h={linkerHealth(presets, s.linkTypes.includes('MERCADOLIVRE'))} />
+          {s.linkTypes.includes('AMAZON') && <HealthLine h={amazonHealth(presets)} />}
         </div>
       )}
 

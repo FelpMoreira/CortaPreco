@@ -1,5 +1,6 @@
 import type { BrowserContext, Page } from 'playwright';
 import { saveDebug } from './browser.js';
+import { ConversionError, type ConvertedProduct } from './conversion.js';
 
 /**
  * Conversão Mercado Livre (espelhamento). Passo a passo, seletores e o que já quebrou:
@@ -40,35 +41,10 @@ const PRODUCT_PATH = /\/(p|up)\/MLBU?\d+|\/MLB-?\d+/i;
 /** Links curtos que o gerador devolve. */
 const SHORT_LINK = /https:\/\/(?:meli\.la\/[A-Za-z0-9]+|mercadolivre\.com\/sec\/[A-Za-z0-9]+)/g;
 
-export type FailureKind = 'SESSION' | 'BLOCKED' | 'NO_PRODUCT' | 'LAYOUT' | 'NETWORK';
+export { ConversionError, type FailureKind } from './conversion.js';
 
-export class ConversionError extends Error {
-  constructor(
-    message: string,
-    readonly kind: FailureKind,
-    readonly debugFile: string | null = null,
-  ) {
-    super(message);
-    this.name = 'ConversionError';
-  }
-  /** Vale tentar de novo na hora? (layout que demorou, rede). Sessão/bloqueio/sem produto, não. */
-  get retryable(): boolean {
-    return this.kind === 'LAYOUT' || this.kind === 'NETWORK';
-  }
-}
-
-export interface MlProduct {
-  /** URL do produto sem query nem hash: é o que vai para o gerador de links. */
-  productUrl: string;
-  /** Id do ML (MLB123, MLBU123) — chave do produto no banco. */
-  itemId: string;
-  title: string;
-  price: number;
-  oldPrice: number | null;
-  discountPct: number | null;
-  imageUrl: string | null;
-  rating: number | null;
-}
+/** Produto lido do card em destaque (a loja é sempre MERCADOLIVRE). */
+export type MlProduct = Omit<ConvertedProduct, 'store'>;
 
 // sem sessão o gerador cai em /login/identification (2026-09) ou /jms/mlb/lgz/login (redirect antigo)
 const isLoginUrl = (u: string) => {

@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import { TelegramClient } from 'telegram';
 import { returnBigInt } from 'telegram/Helpers.js';
 import { StringSession } from 'telegram/sessions/index.js';
-import { canonicalProductUrl, extractLinks, isAllowedHop, SHORTENERS, type MessageLike } from './telegramLinks.js';
+import { canonicalProductUrl, resolveLink } from '@cupons/affiliates';
+import { extractLinks, type MessageLike } from './telegramLinks.js';
+
+export { resolveLink };
 
 /**
  * Leitura de outros grupos/canais do Telegram com uma CONTA DE USUÁRIO dedicada (bot não lê
@@ -43,28 +46,8 @@ export async function getClient(): Promise<TelegramClient> {
 
 export const linkHash = (sourceId: string, url: string) => createHash('sha256').update(`${sourceId}|${url}`).digest('hex');
 
-const MAX_HOPS = 5;
-const HOP_TIMEOUT_MS = 8_000;
 /** Teto de links resolvidos por rodada: a fila de curadoria roda um job por vez e não pode travar. */
 const MAX_LINKS_PER_RUN = 30;
-
-/**
- * Segue encurtadores até a página da loja, um salto por vez (`redirect: 'manual'`), conferindo
- * cada destino com `isAllowedHop` antes de requisitar. Nunca baixa a página da loja.
- */
-export async function resolveLink(url: string): Promise<string> {
-  let current = new URL(url);
-  for (let hop = 0; hop <= MAX_HOPS; hop++) {
-    if (!isAllowedHop(current)) throw new Error(`destino não permitido: ${current.hostname}`);
-    if (!SHORTENERS.test(current.hostname)) return current.href; // chegou na loja
-    const res = await fetch(current, { redirect: 'manual', signal: AbortSignal.timeout(HOP_TIMEOUT_MS) });
-    await res.body?.cancel().catch(() => undefined);
-    const location = res.headers.get('location');
-    if (res.status < 300 || res.status >= 400 || !location) return current.href;
-    current = new URL(location, current);
-  }
-  throw new Error('redirecionamentos demais');
-}
 
 /**
  * Grupo informado pelo ID numérico: o GramJS só acha pelo ID o que já está no cache de entidades,
